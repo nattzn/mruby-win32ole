@@ -88,7 +88,7 @@ ole_val2olevariantdata(mrb_state *mrb, mrb_value val, VARTYPE vt, struct olevari
                 }
             }
         }
-#if (_MSC_VER >= 1300) || defined(__CYGWIN__) || defined(__MINGW32__)
+#if (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__CYGWIN__) || defined(__MINGW32__)
     } else if ( (vt & ~VT_BYREF) == VT_I8 || (vt & ~VT_BYREF) == VT_UI8) {
         ole_val2variant_ex(mrb, val, &(pvar->realvar), (vt & ~VT_BYREF));
         ole_val2variant_ex(mrb, val, &(pvar->var), (vt & ~VT_BYREF));
@@ -196,7 +196,7 @@ ole_set_byref(mrb_state *mrb, VARIANT *realvar, VARIANT *var,  VARTYPE vt)
             V_R8REF(var) = &V_R8(realvar);
             break;
 
-#if (_MSC_VER >= 1300) || defined(__CYGWIN__) || defined(__MINGW32__)
+#if (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__CYGWIN__) || defined(__MINGW32__)
 #ifdef V_I8REF
         case VT_I8:
             V_I8REF(var) = &V_I8(realvar);

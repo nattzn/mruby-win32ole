@@ -53,7 +53,7 @@ typedef struct mrb_encoding
    char *name;
 } mrb_encoding;
 
-static mrb_encoding g_encs[] = 
+static mrb_encoding g_encs[] =
 {
 	{"system"},
 	{"UTF-8"}
@@ -82,7 +82,7 @@ static mrb_encoding *mrb_default_external_encoding(mrb_state *mrb)
 	return mrb_default_internal_encoding(mrb);
 }
 
-static mrb_encoding *mrb_enc_get(mrb_state *mrb, mrb_value obj) 
+static mrb_encoding *mrb_enc_get(mrb_state *mrb, mrb_value obj)
 {
 	if (g_encindex == -1) {
 		if (mrb_respond_to(mrb, obj, mrb_intern_lit(mrb, "codepoints"))) {
@@ -1061,7 +1061,7 @@ ole_val2variant_ex(mrb_state *mrb, mrb_value val, VARIANT *var, VARTYPE vt)
         }
         return;
     }
-#if (_MSC_VER >= 1300) || defined(__CYGWIN__) || defined(__MINGW32__)
+#if (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__CYGWIN__) || defined(__MINGW32__)
     switch(vt & ~VT_BYREF) {
     case VT_I8:
         V_VT(var) = VT_I8;
@@ -1075,7 +1075,7 @@ ole_val2variant_ex(mrb_state *mrb, mrb_value val, VARIANT *var, VARTYPE vt)
         ole_val2variant2(mrb, val, var);
         break;
     }
-#else  /* (_MSC_VER >= 1300) || defined(__CYGWIN__) || defined(__MINGW32__) */
+#else  /* (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__CYGWIN__) || defined(__MINGW32__) */
     ole_val2variant2(mrb, val, var);
 #endif
 }
@@ -1129,7 +1129,7 @@ get_ptr_of_variant(VARIANT *pvar)
     case VT_R8:
         return &V_R8(pvar);
         break;
-#if (_MSC_VER >= 1300) || defined(__CYGWIN__) || defined(__MINGW32__)
+#if (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__CYGWIN__) || defined(__MINGW32__)
     case VT_I8:
         return &V_I8(pvar);
         break;
@@ -1636,10 +1636,10 @@ ole_variant2val(mrb_state *mrb, VARIANT *pvar)
             obj = INT2NUM((long)V_UINT(pvar));
         break;
 
-#if (_MSC_VER >= 1300) || defined(__CYGWIN__) || defined(__MINGW32__)
+#if (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__CYGWIN__) || defined(__MINGW32__)
     case VT_I8:
         if(V_ISBYREF(pvar))
-#if (_MSC_VER >= 1300) || defined(__CYGWIN__) || defined(__MINGW32__)
+#if (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__CYGWIN__) || defined(__MINGW32__)
 #ifdef V_I8REF
             obj = I8_2_NUM(*V_I8REF(pvar));
 #endif
@@ -1651,7 +1651,7 @@ ole_variant2val(mrb_state *mrb, VARIANT *pvar)
         break;
     case VT_UI8:
         if(V_ISBYREF(pvar))
-#if (_MSC_VER >= 1300) || defined(__CYGWIN__) || defined(__MINGW32__)
+#if (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__CYGWIN__) || defined(__MINGW32__)
 #ifdef V_UI8REF
             obj = UI8_2_NUM(*V_UI8REF(pvar));
 #endif
@@ -1661,7 +1661,7 @@ ole_variant2val(mrb_state *mrb, VARIANT *pvar)
         else
             obj = UI8_2_NUM(V_UI8(pvar));
         break;
-#endif  /* (_MSC_VER >= 1300) || defined(__CYGWIN__) || defined(__MINGW32__) */
+#endif  /* (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__CYGWIN__) || defined(__MINGW32__) */
 
     case VT_R4:
         if(V_ISBYREF(pvar))
@@ -2565,7 +2565,7 @@ fole_initialize(mrb_state *mrb, mrb_value self)
     }
     mrb_data_init(self, NULL, &ole_datatype);
 
-    /* FIXME: why call rb_call_super()? 
+    /* FIXME: why call rb_call_super()?
     rb_call_super(0, 0);
     */
     mrb_get_args(mrb, "S|S*", &svr_name, &host, &argv, &argc);
@@ -3881,7 +3881,7 @@ ole_typedesc2val(mrb_state *mrb, ITypeInfo *pTypeInfo, TYPEDESC *pTypeDesc, mrb_
     case VT_UI4:
         typestr = mrb_str_new_lit(mrb, "UI4");
         break;
-#if (_MSC_VER >= 1300) || defined(__CYGWIN__) || defined(__MINGW32__)
+#if (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__CYGWIN__) || defined(__MINGW32__)
     case VT_I8:
         typestr = mrb_str_new_lit(mrb, "I8");
         break;
@@ -4242,4 +4242,3 @@ mrb_mruby_win32ole_gem_final(mrb_state* mrb)
 {
 	free_enc2cp(mrb);
 }
-

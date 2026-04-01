@@ -114,7 +114,7 @@ void Init_win32ole_variant_m(mrb_state *mrb)
      */
     mrb_define_const(mrb, mWIN32OLE_VARIANT, "VT_UI4", INT2FIX(VT_UI4));
 
-#if (_MSC_VER >= 1300) || defined(__CYGWIN__) || defined(__MINGW32__)
+#if (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__CYGWIN__) || defined(__MINGW32__)
     /*
      * represents VT_I8 type constant.
      */
