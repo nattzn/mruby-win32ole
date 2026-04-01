@@ -48,13 +48,11 @@ static volatile DWORD g_ole_initialized_key = TLS_OUT_OF_INDEXES;
 # define g_ole_initialized_set(val) TlsSetValue(g_ole_initialized_key, (void*)(val))
 #endif
 
-typedef struct mrb_encoding
-{
-   char *name;
+typedef struct mrb_encoding {
+    const char *name;
 } mrb_encoding;
 
-static mrb_encoding g_encs[] =
-{
+static mrb_encoding g_encs[] = {
 	{"system"},
 	{"UTF-8"}
 };
