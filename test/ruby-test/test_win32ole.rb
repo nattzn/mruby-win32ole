@@ -70,6 +70,23 @@ if Module.const_defined?(:WIN32OLE)
         @dict1.compareMode = -1
       }
       assert_match(/^\(in setting property `compareMode': \)/, exc.message) #`
+
+      released = WIN32OLE.new('Scripting.Dictionary')
+      released.ole_free
+      exc = assert_raise(RuntimeError) {
+        released.count
+      }
+      assert_match(/cannot invoke `count' on `Scripting.Dictionary': WIN32OLE object has been released/, exc.message)
+
+      exc = assert_raise(RuntimeError) {
+        released.ole_query_interface('{00020400-0000-0000-C000-000000000046}')
+      }
+      assert_match(/cannot query interface `\{00020400-0000-0000-C000-000000000046\}' on `Scripting.Dictionary': WIN32OLE object has been released/, exc.message)
+
+      exc = assert_raise(TypeError) {
+        @dict1._invoke(999, ['not a number'], [WIN32OLE::VARIANT::VT_I4])
+      }
+      assert_match(/argument 0 for dispatch ID 999 cannot be converted from String to VARIANT type 3/, exc.message)
     end
 
     def test_no_method_error
@@ -129,6 +146,18 @@ if Module.const_defined?(:WIN32OLE)
         i += 1
       end
       assert_equal(2, i)
+    end
+
+    def test_inspect
+      assert_equal("#<#{@dict1.class}:Scripting.Dictionary>", @dict1.inspect)
+
+      @dict1.ole_free
+      assert_equal("#<#{@dict1.class}:Scripting.Dictionary (released)>", @dict1.inspect)
+    end
+
+    def test_ole_property_inspect
+      property = OLEProperty.new(@dict1, 42, [3], [8])
+      assert_equal("#<OLEProperty:dispid=42, gettypes=[3], settypes=[8]>", property.inspect)
     end
 
     def test_bracket

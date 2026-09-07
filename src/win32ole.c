@@ -211,7 +211,7 @@ static mrb_value fole_setproperty(mrb_state *mrb, mrb_value self);
 static mrb_value fole_getproperty_with_bracket(mrb_state *mrb, mrb_value self);
 static mrb_value ole_propertyput(mrb_state *mrb, mrb_value self, mrb_value property, mrb_value value);
 static mrb_value fole_free(mrb_state *mrb, mrb_value self);
-static mrb_value ole_each_sub(mrb_state *mrb, mrb_value self);
+static mrb_value fole_inspect(mrb_state *mrb, mrb_value self);
 static mrb_value ole_ienum_free(mrb_state *mrb, IEnumVARIANT *pEnum);
 static mrb_value fole_each(mrb_state *mrb, mrb_value self);
 static mrb_value fole_missing(mrb_state *mrb, mrb_value self);
@@ -1561,6 +1561,9 @@ create_win32ole_object(mrb_state *mrb, struct RClass *klass, IDispatch *pDispatc
 {
     mrb_value obj = fole_s_allocate(mrb, klass);
     ole_set_member(mrb, obj, pDispatch);
+    if (argc > 0 && argv && mrb_string_p(argv[0])) {
+        mrb_iv_set(mrb, obj, mrb_intern_lit(mrb, "_win32ole_progid"), argv[0]);
+    }
     return obj;
 }
 
@@ -2664,6 +2667,7 @@ fole_initialize(mrb_state *mrb, mrb_value self)
     */
     mrb_get_args(mrb, "S|S*", &svr_name, &host, &argv, &argc);
     others = mrb_ary_new_from_values(mrb, argc, argv);
+    mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "_win32ole_progid"), svr_name);
 
     pole = oledata_alloc(mrb);
     mrb_data_init(self, pole, &ole_datatype);
@@ -2776,6 +2780,7 @@ ole_invoke(mrb_state *mrb, mrb_int argc, mrb_value *argv, mrb_value self, USHORT
     mrb_value param;
     mrb_value obj;
     mrb_value v;
+    mrb_value server;
 
     BSTR wcmdname;
 
@@ -2810,7 +2815,13 @@ ole_invoke(mrb_state *mrb, mrb_int argc, mrb_value *argv, mrb_value self, USHORT
     }
     pole = oledata_get_struct(mrb, self);
     if(!pole->pDispatch) {
-        mrb_raise(mrb, E_RUNTIME_ERROR, "failed to get dispatch interface");
+        server = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "_win32ole_progid"));
+        if (!mrb_string_p(server)) {
+            server = mrb_str_new_cstr(mrb, mrb_obj_classname(mrb, self));
+        }
+        mrb_raisef(mrb, E_RUNTIME_ERROR,
+                   "cannot invoke `%S' on `%S': WIN32OLE object has been released",
+                   cmd, server);
     }
     if (is_bracket) {
         DispID = DISPID_VALUE;
@@ -3153,7 +3164,11 @@ ole_invoke2(mrb_state *mrb, mrb_value self, mrb_value dispid, mrb_value args, mr
                                              (VARTYPE)(vt & (~VT_BYREF)));
                     if (hr != S_OK)
                     {
-                        mrb_raise(mrb, E_TYPE_ERROR, "not valid value");
+                        mrb_raisef(mrb, E_TYPE_ERROR,
+                                   "argument %S for dispatch ID %S cannot be converted from %S to VARIANT type %S",
+                                   INT2FIX(j), dispid,
+                                   mrb_str_new_cstr(mrb, mrb_obj_classname(mrb, param)),
+                                   INT2FIX(vt & (~VT_BYREF)));
                     }
                 }
             }
@@ -3435,6 +3450,42 @@ fole_free(mrb_state *mrb, mrb_value self)
     OLE_FREE(pole->pDispatch);
     pole->pDispatch = NULL;
     return mrb_nil_value();
+}
+
+static mrb_value
+fole_inspect(mrb_state *mrb, mrb_value self)
+{
+    struct oledata *pole = oledata_get_struct(mrb, self);
+    ITypeInfo *pTypeInfo = NULL;
+    BSTR bstr = NULL;
+    HRESULT hr;
+    mrb_value detail = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "_win32ole_progid"));
+
+    if (!pole->pDispatch) {
+        detail = mrb_string_p(detail) ? mrb_format(mrb, "%S (released)", detail) :
+                                       mrb_str_new_lit(mrb, "released");
+    }
+    else if (!ole_initialized()) {
+        detail = mrb_string_p(detail) ? mrb_format(mrb, "%S (uninitialized)", detail) :
+                                       mrb_str_new_lit(mrb, "uninitialized");
+    }
+    else if (!mrb_string_p(detail)) {
+        detail = mrb_str_new_lit(mrb, "unknown");
+        hr = pole->pDispatch->lpVtbl->GetTypeInfo(pole->pDispatch, 0,
+                                                  cWIN32OLE_lcid, &pTypeInfo);
+        if (SUCCEEDED(hr)) {
+            hr = pTypeInfo->lpVtbl->GetDocumentation(pTypeInfo, -1,
+                                                      &bstr, NULL, NULL, NULL);
+            if (SUCCEEDED(hr) && bstr) {
+                detail = WC2VSTR(mrb, bstr);
+            }
+            else if (bstr) {
+                SysFreeString(bstr);
+            }
+            OLE_RELEASE(pTypeInfo);
+        }
+    }
+    return make_inspect(mrb, mrb_obj_classname(mrb, self), detail);
 }
 
 struct ole_each_data {
@@ -3805,6 +3856,7 @@ static mrb_value
 fole_query_interface(mrb_state *mrb, mrb_value self)
 {
     mrb_value str_iid;
+    mrb_value server;
     HRESULT hr;
     BSTR pBuf;
     IID iid;
@@ -3825,7 +3877,13 @@ fole_query_interface(mrb_state *mrb, mrb_value self)
 
     pole = oledata_get_struct(mrb, self);
     if(!pole->pDispatch) {
-        mrb_raise(mrb, E_RUNTIME_ERROR, "failed to get dispatch interface");
+        server = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "_win32ole_progid"));
+        if (!mrb_string_p(server)) {
+            server = mrb_str_new_cstr(mrb, mrb_obj_classname(mrb, self));
+        }
+        mrb_raisef(mrb, E_RUNTIME_ERROR,
+                   "cannot query interface `%S' on `%S': WIN32OLE object has been released",
+                   str_iid, server);
     }
 
     hr = pole->pDispatch->lpVtbl->QueryInterface(pole->pDispatch, &iid,
@@ -4220,6 +4278,7 @@ mrb_mruby_win32ole_gem_init(mrb_state* mrb)
     mrb_define_method(mrb, cWIN32OLE, "[]=", fole_setproperty_with_bracket, MRB_ARGS_ANY());
 
     mrb_define_method(mrb, cWIN32OLE, "ole_free", fole_free, MRB_ARGS_NONE());
+    mrb_define_method(mrb, cWIN32OLE, "inspect", fole_inspect, MRB_ARGS_NONE());
 
     mrb_define_method(mrb, cWIN32OLE, "each", fole_each, MRB_ARGS_NONE());
     mrb_define_method(mrb, cWIN32OLE, "method_missing", fole_missing, MRB_ARGS_ANY());

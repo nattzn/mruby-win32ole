@@ -13,4 +13,7 @@ class OLEProperty
   def []=(*args)
     @obj._setproperty(@dispid, args, @settypes)
   end
+  def inspect
+    "#<OLEProperty:dispid=#{@dispid.inspect}, gettypes=#{@gettypes.inspect}, settypes=#{@settypes.inspect}>"
+  end
 end
