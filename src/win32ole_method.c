@@ -53,7 +53,7 @@ olemethod_free(mrb_state *mrb, void *ptr)
     if (!ptr) return;
     OLE_FREE(polemethod->pTypeInfo);
     OLE_FREE(polemethod->pOwnerTypeInfo);
-    free(polemethod);
+    mrb_free(mrb, polemethod);
 }
 
 struct olemethoddata *
@@ -275,7 +275,7 @@ folemethod_initialize(mrb_state *mrb, mrb_value self)
     ITypeInfo *pTypeInfo;
     struct olemethoddata *pmethod = (struct olemethoddata *)DATA_PTR(self);
     if (pmethod) {
-        mrb_free(mrb, pmethod);
+        olemethod_free(mrb, pmethod);
     }
     mrb_data_init(self, NULL, &olemethod_datatype);
 

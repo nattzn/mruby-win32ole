@@ -140,14 +140,14 @@
 
 #define OLE_ADDREF(X) (X) ? ((X)->lpVtbl->AddRef(X)) : 0
 #define OLE_RELEASE(X) (X) ? ((X)->lpVtbl->Release(X)) : 0
-#define OLE_FREE(x) {\
+#define OLE_FREE(x) do {\
     if(ole_initialized() == TRUE) {\
         if(x) {\
             OLE_RELEASE(x);\
             (x) = 0;\
         }\
     }\
-}
+} while (0)
 
 #define OLE_GET_TYPEATTR(X, Y) ((X)->lpVtbl->GetTypeAttr((X), (Y)))
 #define OLE_RELEASE_TYPEATTR(X, Y) ((X)->lpVtbl->ReleaseTypeAttr((X), (Y)))

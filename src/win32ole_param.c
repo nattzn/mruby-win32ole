@@ -88,6 +88,7 @@ oleparam_ole_param_from_index(mrb_state *mrb, mrb_value self, ITypeInfo *pTypeIn
     HRESULT hr;
     BSTR *bstrs;
     UINT len;
+    UINT i;
     struct oleparamdata *pparam;
     hr = pTypeInfo->lpVtbl->GetFuncDesc(pTypeInfo, method_index, &pFuncDesc);
     if (FAILED(hr))
@@ -102,9 +103,11 @@ oleparam_ole_param_from_index(mrb_state *mrb, mrb_value self, ITypeInfo *pTypeIn
         pTypeInfo->lpVtbl->ReleaseFuncDesc(pTypeInfo, pFuncDesc);
         ole_raise(mrb, hr, E_RUNTIME_ERROR, "fail to ITypeInfo::GetNames");
     }
-    SysFreeString(bstrs[0]);
     if (param_index < 1 || len <= (UINT)param_index)
     {
+        for (i = 0; i < len; i++) {
+            SysFreeString(bstrs[i]);
+        }
         pTypeInfo->lpVtbl->ReleaseFuncDesc(pTypeInfo, pFuncDesc);
         mrb_raisef(mrb, E_INDEX_ERROR, "index of param must be in 1..%S", mrb_fixnum_value(len));
     }
@@ -115,6 +118,11 @@ oleparam_ole_param_from_index(mrb_state *mrb, mrb_value self, ITypeInfo *pTypeIn
     pparam->method_index = method_index;
     pparam->index = param_index - 1;
     mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "name"), WC2VSTR(mrb, bstrs[param_index]));
+    for (i = 0; i < len; i++) {
+        if (i != (UINT)param_index) {
+            SysFreeString(bstrs[i]);
+        }
+    }
 
     pTypeInfo->lpVtbl->ReleaseFuncDesc(pTypeInfo, pFuncDesc);
     return self;

@@ -110,7 +110,8 @@ static const mrb_data_type oleevent_datatype = {
     oleevent_free
 };
 
-STDMETHODIMP EVENTSINK_Invoke(
+static HRESULT
+EVENTSINK_Invoke_impl(
     PEVENTSINK pEventSink,
     DISPID dispid,
     REFIID riid,
@@ -221,6 +222,62 @@ STDMETHODIMP EVENTSINK_Invoke(
     return NOERROR;
 }
 
+struct eventsink_invoke_data {
+    PEVENTSINK pEventSink;
+    DISPID dispid;
+    REFIID riid;
+    LCID lcid;
+    WORD wFlags;
+    DISPPARAMS *pdispparams;
+    VARIANT *pvarResult;
+    EXCEPINFO *pexcepinfo;
+    UINT *puArgErr;
+    HRESULT hr;
+};
+
+static mrb_value
+eventsink_invoke_body(mrb_state *mrb, void *userdata)
+{
+    struct eventsink_invoke_data *data = userdata;
+    data->hr = EVENTSINK_Invoke_impl(data->pEventSink, data->dispid,
+                                     data->riid, data->lcid, data->wFlags,
+                                     data->pdispparams, data->pvarResult,
+                                     data->pexcepinfo, data->puArgErr);
+    return mrb_nil_value();
+}
+
+STDMETHODIMP
+EVENTSINK_Invoke(
+    PEVENTSINK pEventSink,
+    DISPID dispid,
+    REFIID riid,
+    LCID lcid,
+    WORD wFlags,
+    DISPPARAMS *pdispparams,
+    VARIANT *pvarResult,
+    EXCEPINFO *pexcepinfo,
+    UINT *puArgErr
+    ) {
+    PIEVENTSINKOBJ pEV = (PIEVENTSINKOBJ)pEventSink;
+    struct eventsink_invoke_data data = {
+        pEventSink, dispid, riid, lcid, wFlags, pdispparams,
+        pvarResult, pexcepinfo, puArgErr, NOERROR
+    };
+    mrb_bool error;
+
+    if (pvarResult) VariantInit(pvarResult);
+    mrb_protect_error(pEV->mrb, eventsink_invoke_body, &data, &error);
+    if (error) {
+        if (pvarResult) VariantClear(pvarResult);
+        if (pexcepinfo) {
+            memset(pexcepinfo, 0, sizeof(*pexcepinfo));
+            pexcepinfo->scode = DISP_E_EXCEPTION;
+        }
+        return DISP_E_EXCEPTION;
+    }
+    return data.hr;
+}
+
 STDMETHODIMP
 EVENTSINK_QueryInterface(
     PEVENTSINK pEV,
@@ -325,7 +382,7 @@ EVENTSINK_Destructor(
     ) {
     if(pEVObj != NULL) {
         OLE_RELEASE(pEVObj->pTypeInfo);
-        free(pEVObj);
+        mrb_free(pEVObj->mrb, pEVObj);
         pEVObj = NULL;
     }
 }
@@ -427,6 +484,8 @@ hash2ptr_dispparams(mrb_state *mrb, mrb_value hash, ITypeInfo *pTypeInfo, DISPID
         pvar = &pdispparams->rgvarg[pdispparams->cArgs-i-1];
         ole_val2ptr_variant(mrb, val, pvar);
     }
+    if (len > 0)
+        SysFreeString(bstrs[0]);
 }
 
 static mrb_value
@@ -564,6 +623,7 @@ find_iid(mrb_state *mrb, mrb_value ole, const char *pitf, IID *piid, ITypeInfo *
                     break;
                 }
                 pstr = ole_wc2mb(mrb, bstr);
+                SysFreeString(bstr);
                 if (strcmp(pitf, pstr) == 0) {
                     hr = pImplTypeInfo->lpVtbl->GetTypeAttr(pImplTypeInfo,
                                                             &pImplTypeAttr);
@@ -578,7 +638,7 @@ find_iid(mrb_state *mrb, mrb_value ole, const char *pitf, IID *piid, ITypeInfo *
                                                                pImplTypeAttr);
                     }
                 }
-                free(pstr);
+                mrb_free(mrb, pstr);
                 OLE_RELEASE(pImplTypeInfo);
                 if (is_found || FAILED(hr))
                     break;
@@ -967,6 +1027,9 @@ ev_advise(mrb_state *mrb, mrb_int argc, mrb_value *argv, mrb_value self)
                                           (IUnknown*)pIEV,
                                           &dwCookie);
     if (FAILED(hr)) {
+        EVENTSINK_Destructor(pIEV);
+        OLE_RELEASE(pConnectionPoint);
+        OLE_RELEASE(pTypeInfo);
         ole_raise(mrb, hr, E_RUNTIME_ERROR, "Advise Error");
     }
 

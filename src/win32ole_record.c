@@ -102,7 +102,7 @@ ole_rec2variant(mrb_state *mrb, mrb_value rec, VARIANT *var)
             ole_raise(mrb, hr, E_WIN32OLE_RUNTIME_ERROR, "failed to get size for allocation of VT_RECORD object");
         }
         if (prec->pdata) {
-            free(prec->pdata);
+            mrb_free(mrb, prec->pdata);
         }
         prec->pdata = ALLOC_N(char, size);
         if (!prec->pdata) {
@@ -287,7 +287,7 @@ folerecord_initialize(mrb_state *mrb, mrb_value self) {
 
     prec = (struct olerecorddata *)DATA_PTR(self);
     if (prec) {
-        mrb_free(mrb, prec);
+        olerecord_free(mrb, prec);
     }
     mrb_data_init(self, NULL, &olerecord_datatype);
 
@@ -329,6 +329,7 @@ folerecord_initialize(mrb_state *mrb, mrb_value self) {
     mrb_data_init(self, prec, &olerecord_datatype);
 
     olerecord_set_ivar(mrb, self, pri, NULL);
+    OLE_RELEASE(pri);
 
     return self;
 }

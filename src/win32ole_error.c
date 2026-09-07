@@ -50,7 +50,7 @@ ole_raise(mrb_state *mrb, HRESULT hr, struct RClass *ecs, const char *fmt, ...)
     mrb_value err_msg;
     char cmsg[1024];
     va_init_list(args, fmt);
-    vsprintf(cmsg, fmt, args);
+    vsnprintf(cmsg, sizeof(cmsg), fmt, args);
     va_end(args);
     msg = mrb_str_new_cstr(mrb, cmsg);
 

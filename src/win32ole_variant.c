@@ -15,7 +15,6 @@ static mrb_value folevariant_s_array(mrb_state *mrb, mrb_value klass);
 static void check_type_val2variant(mrb_state *mrb, mrb_value val);
 static mrb_value folevariant_initialize(mrb_state *mrb, mrb_value self);
 static LONG *ary2safe_array_index(mrb_state *mrb, int ary_size, mrb_value *ary, SAFEARRAY *psa);
-static void unlock_safe_array(mrb_state *mrb, SAFEARRAY *psa);
 static SAFEARRAY *get_locked_safe_array(mrb_state *mrb, mrb_value val);
 static mrb_value folevariant_ary_aref(mrb_state *mrb, mrb_value self);
 static mrb_value folevariant_ary_aset(mrb_state *mrb, mrb_value self);
@@ -316,7 +315,7 @@ folevariant_s_array(mrb_state *mrb, mrb_value klass)
 
     psa = SafeArrayCreate((VARTYPE)(vt & VT_TYPEMASK), dim, psab);
     if (psa == NULL) {
-        if (psab) free(psab);
+        if (psab) mrb_free(mrb, psab);
         mrb_raise(mrb, E_RUNTIME_ERROR, "memory allocation error(SafeArrayCreate)");
     }
 
@@ -328,7 +327,7 @@ folevariant_s_array(mrb_state *mrb, mrb_value klass)
     } else {
         V_ARRAY(&(pvar->var)) = psa;
     }
-    if (psab) free(psab);
+    if (psab) mrb_free(mrb, psab);
     return obj;
 }
 
@@ -414,7 +413,7 @@ folevariant_initialize(mrb_state *mrb, mrb_value self)
 
     pvar = (struct olevariantdata *)DATA_PTR(self);
     if (pvar) {
-        mrb_free(mrb, pvar);
+        olevariant_free(mrb, pvar);
     }
     mrb_data_init(self, NULL, &olevariant_datatype);
 
@@ -487,14 +486,55 @@ ary2safe_array_index(mrb_state *mrb, int ary_size, mrb_value *ary, SAFEARRAY *ps
     return pid;
 }
 
-static void
-unlock_safe_array(mrb_state *mrb, SAFEARRAY *psa)
+struct safe_array_aref_data {
+    int argc;
+    mrb_value *argv;
+    SAFEARRAY *psa;
+    LONG *pid;
+    VARIANT variant;
+};
+
+static mrb_value
+safe_array_aref_body(mrb_state *mrb, void *userdata)
 {
+    struct safe_array_aref_data *data = userdata;
     HRESULT hr;
-    hr = SafeArrayUnlock(psa);
+
+    data->pid = ary2safe_array_index(mrb, data->argc, data->argv, data->psa);
+    hr = SafeArrayPtrOfIndex(data->psa, data->pid, &V_BYREF(&data->variant));
     if (FAILED(hr)) {
-        ole_raise(mrb, hr, E_RUNTIME_ERROR, "failed to SafeArrayUnlock");
+        ole_raise(mrb, hr, E_WIN32OLE_RUNTIME_ERROR, "failed to SafeArrayPtrOfIndex");
     }
+    return ole_variant2val(mrb, &data->variant);
+}
+
+struct safe_array_aset_data {
+    int argc;
+    mrb_value *argv;
+    SAFEARRAY *psa;
+    LONG *pid;
+    VARIANT var;
+    VARTYPE vt;
+};
+
+static mrb_value
+safe_array_aset_body(mrb_state *mrb, void *userdata)
+{
+    struct safe_array_aset_data *data = userdata;
+    HRESULT hr;
+    VOID *p;
+
+    data->pid = ary2safe_array_index(mrb, data->argc - 1, data->argv, data->psa);
+    p = val2variant_ptr(mrb, data->argv[data->argc - 1], &data->var, data->vt);
+    if ((V_VT(&data->var) == VT_DISPATCH && V_DISPATCH(&data->var) == NULL) ||
+        (V_VT(&data->var) == VT_UNKNOWN && V_UNKNOWN(&data->var) == NULL)) {
+        mrb_raise(mrb, E_WIN32OLE_RUNTIME_ERROR, "argument does not have IDispatch or IUnknown Interface");
+    }
+    hr = SafeArrayPutElement(data->psa, data->pid, p);
+    if (FAILED(hr)) {
+        ole_raise(mrb, hr, E_WIN32OLE_RUNTIME_ERROR, "failed to SafeArrayPutElement");
+    }
+    return data->argv[data->argc - 1];
 }
 
 /*
@@ -524,10 +564,10 @@ folevariant_ary_aref(mrb_state *mrb, mrb_value self)
     mrb_value *argv;
     struct olevariantdata *pvar;
     SAFEARRAY *psa;
-    mrb_value val = mrb_nil_value();
-    VARIANT variant;
-    LONG *pid;
-    HRESULT hr;
+    mrb_value val;
+    mrb_bool error;
+    HRESULT unlock_hr;
+    struct safe_array_aref_data data;
 
     mrb_get_args(mrb, "*", &argv, &argc);
 
@@ -538,21 +578,25 @@ folevariant_ary_aref(mrb_state *mrb, mrb_value self)
     }
     psa = get_locked_safe_array(mrb, self);
     if (psa == NULL) {
-        return val;
+        return mrb_nil_value();
     }
 
-    pid = ary2safe_array_index(mrb, argc, argv, psa);
-
-    VariantInit(&variant);
-    V_VT(&variant) = (V_VT(&(pvar->var)) & ~VT_ARRAY) | VT_BYREF;
-    hr = SafeArrayPtrOfIndex(psa, pid, &V_BYREF(&variant));
-    if (FAILED(hr)) {
-        ole_raise(mrb, hr, E_WIN32OLE_RUNTIME_ERROR, "failed to SafeArrayPtrOfIndex");
+    data.argc = argc;
+    data.argv = argv;
+    data.psa = psa;
+    data.pid = NULL;
+    VariantInit(&data.variant);
+    V_VT(&data.variant) = (V_VT(&(pvar->var)) & ~VT_ARRAY) | VT_BYREF;
+    val = mrb_protect_error(mrb, safe_array_aref_body, &data, &error);
+    unlock_hr = SafeArrayUnlock(psa);
+    if (data.pid) mrb_free(mrb, data.pid);
+    VariantClear(&data.variant);
+    if (error) {
+        mrb_exc_raise(mrb, val);
     }
-    val = ole_variant2val(mrb, &variant);
-
-    unlock_safe_array(mrb, psa);
-    if (pid) free(pid);
+    if (FAILED(unlock_hr)) {
+        ole_raise(mrb, unlock_hr, E_RUNTIME_ERROR, "failed to SafeArrayUnlock");
+    }
     return val;
 }
 
@@ -584,11 +628,10 @@ folevariant_ary_aset(mrb_state *mrb, mrb_value self)
     mrb_value *argv;
     struct olevariantdata *pvar;
     SAFEARRAY *psa;
-    VARIANT var;
-    VARTYPE vt;
-    LONG *pid;
-    HRESULT hr;
-    VOID *p = NULL;
+    mrb_value result;
+    mrb_bool error;
+    HRESULT unlock_hr;
+    struct safe_array_aset_data data;
 
     mrb_get_args(mrb, "*", &argv, &argc);
 
@@ -602,23 +645,23 @@ folevariant_ary_aset(mrb_state *mrb, mrb_value self)
         mrb_raise(mrb, E_RUNTIME_ERROR, "failed to get SafeArray pointer");
     }
 
-    pid = ary2safe_array_index(mrb, argc-1, argv, psa);
-
-    VariantInit(&var);
-    vt = (V_VT(&(pvar->var)) & ~VT_ARRAY);
-    p = val2variant_ptr(mrb, argv[argc-1], &var, vt);
-    if ((V_VT(&var) == VT_DISPATCH && V_DISPATCH(&var) == NULL) ||
-        (V_VT(&var) == VT_UNKNOWN && V_UNKNOWN(&var) == NULL)) {
-        mrb_raise(mrb, E_WIN32OLE_RUNTIME_ERROR, "argument does not have IDispatch or IUnknown Interface");
+    data.argc = argc;
+    data.argv = argv;
+    data.psa = psa;
+    data.pid = NULL;
+    data.vt = (V_VT(&(pvar->var)) & ~VT_ARRAY);
+    VariantInit(&data.var);
+    result = mrb_protect_error(mrb, safe_array_aset_body, &data, &error);
+    unlock_hr = SafeArrayUnlock(psa);
+    if (data.pid) mrb_free(mrb, data.pid);
+    VariantClear(&data.var);
+    if (error) {
+        mrb_exc_raise(mrb, result);
     }
-    hr = SafeArrayPutElement(psa, pid, p);
-    if (FAILED(hr)) {
-        ole_raise(mrb, hr, E_WIN32OLE_RUNTIME_ERROR, "failed to SafeArrayPutElement");
+    if (FAILED(unlock_hr)) {
+        ole_raise(mrb, unlock_hr, E_RUNTIME_ERROR, "failed to SafeArrayUnlock");
     }
-
-    unlock_safe_array(mrb, psa);
-    if (pid) free(pid);
-    return argv[argc-1];
+    return result;
 }
 
 /*

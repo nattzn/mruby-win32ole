@@ -376,7 +376,7 @@ static ULONG ( STDMETHODCALLTYPE Release )(
     ULONG u = --(p->refcount);
     if (u == 0) {
         mrb_hash_delete_key(mrb, com_hash, p->obj);
-        free(p);
+        mrb_free(mrb, p);
     }
     return u;
 }
@@ -397,6 +397,29 @@ static HRESULT ( STDMETHODCALLTYPE GetTypeInfo )(
     return E_NOTIMPL;
 }
 
+struct get_ids_of_names_data {
+    LPOLESTR *rgszNames;
+    DISPID *rgDispId;
+    char *psz;
+    HRESULT hr;
+};
+
+static mrb_value
+get_ids_of_names_body(mrb_state *mrb, void *userdata)
+{
+    struct get_ids_of_names_data *data = userdata;
+    mrb_sym nameid;
+
+    data->psz = ole_wc2mb(mrb, *data->rgszNames); // support only one method
+    nameid = mrb_intern_cstr(mrb, data->psz);
+    if ((mrb_sym)(DISPID)nameid != nameid) {
+        data->hr = E_NOINTERFACE;
+    }
+    else {
+        *data->rgDispId = (DISPID)nameid;
+    }
+    return mrb_nil_value();
+}
 
 static HRESULT ( STDMETHODCALLTYPE GetIDsOfNames )(
     IDispatch __RPC_FAR * This,
@@ -408,12 +431,48 @@ static HRESULT ( STDMETHODCALLTYPE GetIDsOfNames )(
 {
     Win32OLEIDispatch* p = (Win32OLEIDispatch*)This;
     mrb_state *mrb = p->mrb;
-    char* psz = ole_wc2mb(mrb, *rgszNames); // support only one method
-    mrb_sym nameid = mrb_intern_cstr(mrb, psz);
-    free(psz);
-    if ((mrb_sym)(DISPID)nameid != nameid) return E_NOINTERFACE;
-    *rgDispId = (DISPID)nameid;
-    return S_OK;
+    struct get_ids_of_names_data data = { rgszNames, rgDispId, NULL, S_OK };
+    mrb_bool error;
+
+    if (!rgszNames || cNames == 0 || !rgDispId) return E_INVALIDARG;
+    mrb_protect_error(mrb, get_ids_of_names_body, &data, &error);
+    if (data.psz) mrb_free(mrb, data.psz);
+    return error ? DISP_E_EXCEPTION : data.hr;
+}
+
+struct invoke_data {
+    Win32OLEIDispatch *dispatch;
+    DISPID dispIdMember;
+    WORD wFlags;
+    DISPPARAMS *pDispParams;
+    VARIANT *pVarResult;
+    mrb_value *parg;
+};
+
+static mrb_value
+invoke_body(mrb_state *mrb, void *userdata)
+{
+    struct invoke_data *data = userdata;
+    mrb_value v;
+    mrb_sym mid = (mrb_sym)data->dispIdMember;
+    int args = data->pDispParams->cArgs;
+    int i;
+
+    for (i = 0; i < args; i++) {
+        data->parg[i] = ole_variant2val(mrb, &data->pDispParams->rgvarg[args - i - 1]);
+    }
+    if (data->dispIdMember == DISPID_VALUE) {
+        if (data->wFlags == DISPATCH_METHOD) {
+            mid = mrb_intern_lit(mrb, "call");
+        } else if (data->wFlags & DISPATCH_PROPERTYGET) {
+            mid = mrb_intern_lit(mrb, "value");
+        }
+    }
+    v = mrb_funcall_argv(mrb, data->dispatch->obj, mid, args, data->parg);
+    if (data->pVarResult) {
+        ole_val2variant(mrb, v, data->pVarResult);
+    }
+    return v;
 }
 
 static /* [local] */ HRESULT ( STDMETHODCALLTYPE Invoke )(
@@ -427,25 +486,29 @@ static /* [local] */ HRESULT ( STDMETHODCALLTYPE Invoke )(
     /* [out] */ EXCEPINFO __RPC_FAR *pExcepInfo,
     /* [out] */ UINT __RPC_FAR *puArgErr)
 {
-    mrb_value v;
-    int i;
-    int args = pDispParams->cArgs;
     Win32OLEIDispatch* p = (Win32OLEIDispatch*)This;
-    mrb_value* parg = ALLOCA_N(mrb_value, args);
-    mrb_sym mid = (mrb_sym)dispIdMember;
-    mrb_state *mrb = p->mrb;
-    for (i = 0; i < args; i++) {
-        *(parg + i) = ole_variant2val(mrb, &pDispParams->rgvarg[args - i - 1]);
-    }
-    if (dispIdMember == DISPID_VALUE) {
-        if (wFlags == DISPATCH_METHOD) {
-            mid = mrb_intern_lit(mrb, "call");
-        } else if (wFlags & DISPATCH_PROPERTYGET) {
-            mid = mrb_intern_lit(mrb, "value");
+    int args;
+    mrb_bool error;
+    struct invoke_data data;
+
+    if (!pDispParams) return E_INVALIDARG;
+    args = pDispParams->cArgs;
+    data.dispatch = p;
+    data.dispIdMember = dispIdMember;
+    data.wFlags = wFlags;
+    data.pDispParams = pDispParams;
+    data.pVarResult = pVarResult;
+    data.parg = ALLOCA_N(mrb_value, args);
+    if (pVarResult) VariantInit(pVarResult);
+    mrb_protect_error(p->mrb, invoke_body, &data, &error);
+    if (error) {
+        if (pVarResult) VariantClear(pVarResult);
+        if (pExcepInfo) {
+            memset(pExcepInfo, 0, sizeof(*pExcepInfo));
+            pExcepInfo->scode = DISP_E_EXCEPTION;
         }
+        return DISP_E_EXCEPTION;
     }
-    v = mrb_funcall_argv(mrb, p->obj, mid, args, parg);
-    ole_val2variant(mrb, v, pVarResult);
     return S_OK;
 }
 
@@ -853,8 +916,8 @@ ole_excepinfo2msg(mrb_state *mrb, EXCEPINFO *pExInfo)
     else {
         mrb_str_cat_lit(mrb, error_msg, "<No Description>");
     }
-    if(pSource) free(pSource);
-    if(pDescription) free(pDescription);
+    if(pSource) mrb_free(mrb, pSource);
+    if(pDescription) mrb_free(mrb, pDescription);
     ole_freeexceptinfo(pExInfo);
     return error_msg;
 }
@@ -1186,10 +1249,12 @@ ole_set_safe_array(mrb_state *mrb, long n, SAFEARRAY *psa, LONG *pid, long *pub,
         if (mrb_bool(is_all_index_under(pid, pub, dim))) {
             if ((V_VT(&var) == VT_DISPATCH && V_DISPATCH(&var) == NULL) ||
                 (V_VT(&var) == VT_UNKNOWN && V_UNKNOWN(&var) == NULL)) {
+                VariantClear(&var);
                 mrb_raise(mrb, E_WIN32OLE_RUNTIME_ERROR, "element of array does not have IDispatch or IUnknown Interface");
             }
             hr = SafeArrayPutElement(psa, pid, p);
         }
+        VariantClear(&var);
         if (FAILED(hr)) {
             ole_raise(mrb, hr, E_RUNTIME_ERROR, "failed to SafeArrayPutElement");
         }
@@ -1201,6 +1266,25 @@ ole_set_safe_array(mrb_state *mrb, long n, SAFEARRAY *psa, LONG *pid, long *pub,
             i = dim - 1;
         }
     }
+}
+
+struct ole_set_safe_array_data {
+    long n;
+    SAFEARRAY *psa;
+    LONG *pid;
+    long *pub;
+    mrb_value val;
+    long dim;
+    VARTYPE vt;
+};
+
+static mrb_value
+ole_set_safe_array_body(mrb_state *mrb, void *userdata)
+{
+    struct ole_set_safe_array_data *data = userdata;
+    ole_set_safe_array(mrb, data->n, data->psa, data->pid, data->pub,
+                       data->val, data->dim, data->vt);
+    return mrb_nil_value();
 }
 
 static long
@@ -1259,6 +1343,9 @@ ole_val_ary2variant_ary(mrb_state *mrb, mrb_value val, VARIANT *var, VARTYPE vt)
     SAFEARRAY *psa = NULL;
     long      *pub;
     LONG      *pid;
+    mrb_bool error = FALSE;
+    mrb_value error_value = mrb_nil_value();
+    struct ole_set_safe_array_data data;
 
     mrb_check_type(mrb, val, MRB_TT_ARRAY);
 
@@ -1269,9 +1356,9 @@ ole_val_ary2variant_ary(mrb_state *mrb, mrb_value val, VARIANT *var, VARTYPE vt)
     pid  = ALLOC_N(LONG, dim);
 
     if(!psab || !pub || !pid) {
-        if(pub) free(pub);
-        if(psab) free(psab);
-        if(pid) free(pid);
+        if(pub) mrb_free(mrb, pub);
+        if(psab) mrb_free(mrb, psab);
+        if(pid) mrb_free(mrb, pid);
         mrb_raise(mrb, E_RUNTIME_ERROR, "memory allocation error");
     }
 
@@ -1291,13 +1378,26 @@ ole_val_ary2variant_ary(mrb_state *mrb, mrb_value val, VARIANT *var, VARTYPE vt)
     else
         hr = SafeArrayLock(psa);
     if (SUCCEEDED(hr)) {
-        ole_set_safe_array(mrb, dim-1, psa, pid, pub, val, dim, (VARTYPE)(vt & VT_TYPEMASK));
+        data.n = dim - 1;
+        data.psa = psa;
+        data.pid = pid;
+        data.pub = pub;
+        data.val = val;
+        data.dim = dim;
+        data.vt = (VARTYPE)(vt & VT_TYPEMASK);
+        error_value = mrb_protect_error(mrb, ole_set_safe_array_body, &data, &error);
         hr = SafeArrayUnlock(psa);
     }
 
-    if(pub) free(pub);
-    if(psab) free(psab);
-    if(pid) free(pid);
+    if(pub) mrb_free(mrb, pub);
+    if(psab) mrb_free(mrb, psab);
+    if(pid) mrb_free(mrb, pid);
+
+    if (error) {
+        if (psa != NULL)
+            SafeArrayDestroy(psa);
+        mrb_exc_raise(mrb, error_value);
+    }
 
     if (SUCCEEDED(hr)) {
         V_VT(var) = vt;
@@ -1469,10 +1569,7 @@ ary_new_dim(mrb_state *mrb, mrb_value myary, LONG *pid, LONG *plb, LONG dim) {
     long i;
     mrb_value obj = mrb_nil_value();
     mrb_value pobj = mrb_nil_value();
-    long *ids = ALLOC_N(long, dim);
-    if (!ids) {
-        mrb_raise(mrb, E_RUNTIME_ERROR, "memory allocation error");
-    }
+    long *ids = ALLOCA_N(long, dim);
     for(i = 0; i < dim; i++) {
         ids[i] = pid[i] - plb[i];
     }
@@ -1488,7 +1585,6 @@ ary_new_dim(mrb_state *mrb, mrb_value myary, LONG *pid, LONG *plb, LONG dim) {
         obj = mrb_ary_entry(pobj, ids[i]);
         pobj = obj;
     }
-    if (ids) free(ids);
     return obj;
 }
 
@@ -1527,9 +1623,9 @@ ole_variant2val(mrb_state *mrb, VARIANT *pvar)
         pub = ALLOC_N(LONG, dim);
 
         if(!pid || !plb || !pub) {
-            if(pid) free(pid);
-            if(plb) free(plb);
-            if(pub) free(pub);
+            if(pid) mrb_free(mrb, pid);
+            if(plb) mrb_free(mrb, plb);
+            if(pub) mrb_free(mrb, pub);
             mrb_raise(mrb, E_RUNTIME_ERROR, "memory allocation error");
         }
 
@@ -1568,9 +1664,9 @@ ole_variant2val(mrb_state *mrb, VARIANT *pvar)
             }
             SafeArrayUnlock(psa);
         }
-        if(pid) free(pid);
-        if(plb) free(plb);
-        if(pub) free(pub);
+        if(pid) mrb_free(mrb, pid);
+        if(plb) mrb_free(mrb, plb);
+        if(pub) mrb_free(mrb, pub);
         return obj;
     }
     switch(V_VT(pvar) & ~VT_BYREF){
@@ -1821,11 +1917,11 @@ reg_get_val(mrb_state *mrb, HKEY hkey, const char *subkey)
 		DWORD len = ExpandEnvironmentStringsA(pbuf2, NULL, 0);
 		pbuf = ALLOC_N(char, len + 1);
 		ExpandEnvironmentStringsA(pbuf2, pbuf, len + 1);
-		free(pbuf2);
+		mrb_free(mrb, pbuf2);
             }
             val = mrb_str_new_cstr(mrb, (char *)pbuf);
         }
-        free(pbuf);
+        mrb_free(mrb, pbuf);
     }
     return val;
 }
@@ -1899,7 +1995,7 @@ ole_const_load(mrb_state *mrb, ITypeLib *pTypeLib, mrb_value klass, mrb_value se
                 mrb_gc_arena_restore(mrb, ai);
                 SysFreeString(bstr);
                 if(pName) {
-                    free(pName);
+                    mrb_free(mrb, pName);
                     pName = NULL;
                 }
             }
@@ -3341,23 +3437,25 @@ fole_free(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-static mrb_value
-ole_each_sub(mrb_state *mrb, mrb_value self)
-{
+struct ole_each_data {
     IEnumVARIANT *pEnum;
-    mrb_value pEnumV, block;
+    mrb_value block;
     VARIANT variant;
+};
+
+static mrb_value
+ole_each_body(mrb_state *mrb, void *userdata)
+{
+    struct ole_each_data *data = userdata;
     mrb_value obj = mrb_nil_value();
     int ai;
-    mrb_get_args(mrb, "oo", &pEnumV, &block);
-    pEnum = (IEnumVARIANT *)mrb_cptr(pEnumV);
-    VariantInit(&variant);
+
     ai = mrb_gc_arena_save(mrb);
-    while(pEnum->lpVtbl->Next(pEnum, 1, &variant, NULL) == S_OK) {
-        obj = ole_variant2val(mrb, &variant);
-        VariantClear(&variant);
-        VariantInit(&variant);
-        mrb_yield(mrb, block, obj);
+    while(data->pEnum->lpVtbl->Next(data->pEnum, 1, &data->variant, NULL) == S_OK) {
+        obj = ole_variant2val(mrb, &data->variant);
+        VariantClear(&data->variant);
+        VariantInit(&data->variant);
+        mrb_yield(mrb, data->block, obj);
         mrb_gc_arena_restore(mrb, ai);
     }
     return mrb_nil_value();
@@ -3399,6 +3497,9 @@ fole_each(mrb_state *mrb, mrb_value self)
     IEnumVARIANT *pEnum = NULL;
     void *p;
     mrb_value block;
+    mrb_value result_value;
+    mrb_bool error;
+    struct ole_each_data data;
 
     mrb_get_args(mrb, "&", &block);
 
@@ -3445,14 +3546,15 @@ fole_each(mrb_state *mrb, mrb_value self)
     }
 
     VariantClear(&result);
-    /* FIXME: Is there better way to do things like rb_ensure() in mruby?
-    rb_ensure(ole_each_sub, (mrb_value)pEnum, ole_ienum_free, (mrb_value)pEnum);
-    */
-    mrb_define_method(mrb, mrb_obj_class(mrb, self), "_tmp_method_ole_each_", ole_each_sub, MRB_ARGS_REQ(2));
-    mrb_funcall(mrb, self, "_tmp_method_ole_each_", 2, mrb_cptr_value(mrb, pEnum), block);
-    mrb_undef_method(mrb, mrb_obj_class(mrb, self), "_tmp_method_ole_each_");
+    data.pEnum = pEnum;
+    data.block = block;
+    VariantInit(&data.variant);
+    result_value = mrb_protect_error(mrb, ole_each_body, &data, &error);
+    VariantClear(&data.variant);
     ole_ienum_free(mrb, pEnum);
-    /* FIXME: */
+    if (error) {
+        mrb_exc_raise(mrb, result_value);
+    }
     return mrb_nil_value();
 }
 
