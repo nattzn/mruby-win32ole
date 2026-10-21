@@ -518,11 +518,18 @@ static /* [local] */ HRESULT ( STDMETHODCALLTYPE Invoke )(
         return DISP_E_EXCEPTION;
     }
     mrb_gc_arena_restore(mrb, ai);
-    /* Keep Ruby owners alive for VARIANT results that borrow their storage. */
-    if (pVarResult && (mrb_data_p(result) || mrb_array_p(result))) {
-        mrb_gc_protect(mrb, result);
-    }
+    ole_protect_variant_result_owner(mrb, result, pVarResult);
     return S_OK;
+}
+
+/* Keep Ruby owners alive for VARIANT results that borrow their storage.
+   Arrays stay protected because SAFEARRAY elements may borrow BYREF data. */
+void
+ole_protect_variant_result_owner(mrb_state *mrb, mrb_value val, VARIANT *pvar)
+{
+    if (pvar && (mrb_data_p(val) || mrb_array_p(val))) {
+        mrb_gc_protect(mrb, val);
+    }
 }
 
 BOOL

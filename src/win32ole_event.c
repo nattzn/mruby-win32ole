@@ -120,7 +120,8 @@ EVENTSINK_Invoke_impl(
     DISPPARAMS *pdispparams,
     VARIANT *pvarResult,
     EXCEPINFO *pexcepinfo,
-    UINT *puArgErr
+    UINT *puArgErr,
+    mrb_value *presult
     ) {
 
     HRESULT hr;
@@ -139,6 +140,7 @@ EVENTSINK_Invoke_impl(
     mrb_state *mrb;
     PIEVENTSINKOBJ pEV = (PIEVENTSINKOBJ)pEventSink;
     mrb = pEV->mrb;
+    *presult = mrb_nil_value();
 
     pTypeInfo = pEV->pTypeInfo;
     obj = evs_entry(mrb, pEV->m_event_id);
@@ -217,6 +219,8 @@ EVENTSINK_Invoke_impl(
     if (pvarResult) {
         VariantInit(pvarResult);
         ole_val2variant(mrb, result, pvarResult);
+        /* Hand the owner to EVENTSINK_Invoke so it outlives the arena restore. */
+        *presult = result;
     }
 
     return NOERROR;
@@ -233,6 +237,7 @@ struct eventsink_invoke_data {
     EXCEPINFO *pexcepinfo;
     UINT *puArgErr;
     HRESULT hr;
+    mrb_value result;
 };
 
 static mrb_value
@@ -242,7 +247,8 @@ eventsink_invoke_body(mrb_state *mrb, void *userdata)
     data->hr = EVENTSINK_Invoke_impl(data->pEventSink, data->dispid,
                                      data->riid, data->lcid, data->wFlags,
                                      data->pdispparams, data->pvarResult,
-                                     data->pexcepinfo, data->puArgErr);
+                                     data->pexcepinfo, data->puArgErr,
+                                     &data->result);
     return mrb_nil_value();
 }
 
@@ -262,7 +268,7 @@ EVENTSINK_Invoke(
     mrb_state *mrb = pEV->mrb;
     struct eventsink_invoke_data data = {
         pEventSink, dispid, riid, lcid, wFlags, pdispparams,
-        pvarResult, pexcepinfo, puArgErr, NOERROR
+        pvarResult, pexcepinfo, puArgErr, NOERROR, mrb_nil_value()
     };
     mrb_bool error;
     int ai;
@@ -280,6 +286,7 @@ EVENTSINK_Invoke(
         return DISP_E_EXCEPTION;
     }
     mrb_gc_arena_restore(mrb, ai);
+    ole_protect_variant_result_owner(mrb, data.result, pvarResult);
     return data.hr;
 }
 

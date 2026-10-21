@@ -185,6 +185,7 @@ void ole_val2variant(mrb_state *mrb, mrb_value val, VARIANT *var);
 void ole_val2variant2(mrb_state *mrb, mrb_value val, VARIANT *var);
 void ole_val2variant_ex(mrb_state *mrb, mrb_value val, VARIANT *var, VARTYPE vt);
 mrb_value ole_variant2val(mrb_state *mrb, VARIANT *pvar);
+void ole_protect_variant_result_owner(mrb_state *mrb, mrb_value val, VARIANT *pvar);
 HRESULT ole_val_ary2variant_ary(mrb_state *mrb, mrb_value val, VARIANT *var, VARTYPE vt);
 VOID *val2variant_ptr(mrb_state *mrb, mrb_value val, VARIANT *var, VARTYPE vt);
 HRESULT typelib_from_val(mrb_state *mrb, mrb_value obj, ITypeLib **pTypeLib);

@@ -7,6 +7,29 @@ void mrb_mruby_win32ole_early_invoke_test(mrb_state *mrb);
 void mrb_mruby_win32ole_bstr_cleanup_test(mrb_state *mrb);
 void mrb_mruby_win32ole_object_state_test(mrb_state *mrb);
 
+static const WCHAR borrowed_text[] = L"callback result";
+
+/* Checks that a BYREF BSTR (optionally inside a VARIANT array) still points
+   to live data after the Ruby side ran a full GC. */
+static BOOL
+borrowed_result_alive(VARIANT *result, BOOL in_array)
+{
+    VARIANT *elem = result;
+    BOOL ok;
+
+    if (in_array) {
+        SAFEARRAY *psa;
+        if (V_VT(result) != (VT_ARRAY | VT_VARIANT)) return FALSE;
+        psa = V_ARRAY(result);
+        if (!psa || SafeArrayGetDim(psa) != 1 || psa->rgsabound[0].cElements != 1) return FALSE;
+        if (FAILED(SafeArrayAccessData(psa, (void **)&elem))) return FALSE;
+    }
+    ok = V_VT(elem) == (VT_BSTR | VT_BYREF) && V_BSTRREF(elem) && *V_BSTRREF(elem) &&
+         wcscmp(*V_BSTRREF(elem), borrowed_text) == 0;
+    if (in_array) SafeArrayUnaccessData(V_ARRAY(result));
+    return ok;
+}
+
 static mrb_value
 callback_arena_exercise(mrb_state *mrb, mrb_value self)
 {
@@ -22,11 +45,13 @@ callback_arena_exercise(mrb_state *mrb, mrb_value self)
     BOOL expect_exception;
     BOOL expect_string;
     BOOL expect_byref;
+    BOOL expect_byref_array;
 
     mrb_get_args(mrb, "zi", &method, &iterations);
     expect_exception = strcmp(method, "raise_error") == 0;
     expect_string = strcmp(method, "string_result") == 0;
     expect_byref = strcmp(method, "byref_result") == 0;
+    expect_byref_array = strcmp(method, "byref_array_result") == 0;
     if (iterations < 1) mrb_raise(mrb, E_ARGUMENT_ERROR, "iterations must be positive");
 
     VariantInit(&target);
@@ -81,22 +106,32 @@ callback_arena_exercise(mrb_state *mrb, mrb_value self)
             VariantClear(&target);
             mrb_raise(mrb, E_RUNTIME_ERROR, "Invoke failed");
         }
-        else if (expect_byref ? V_VT(&result) != (VT_BSTR | VT_BYREF) :
+        else if (expect_byref_array ? V_VT(&result) != (VT_ARRAY | VT_VARIANT) :
+                 expect_byref ? V_VT(&result) != (VT_BSTR | VT_BYREF) :
                  (expect_string ? V_VT(&result) != VT_BSTR : V_VT(&result) != VT_I4)) {
             VariantClear(&result);
             SysFreeString(name);
             VariantClear(&target);
             mrb_raise(mrb, E_RUNTIME_ERROR, "Invoke returned an unexpected VARIANT type");
         }
-        if (mrb_gc_arena_save(mrb) != arena + (expect_byref ? 1 : 0)) {
+        if (mrb_gc_arena_save(mrb) != arena + ((expect_byref || expect_byref_array) ? 1 : 0)) {
             VariantClear(&result);
             SysFreeString(name);
             VariantClear(&target);
             mrb_raise(mrb, E_RUNTIME_ERROR, "Invoke changed the GC arena index");
         }
 
-        if (expect_byref) mrb_full_gc(mrb);
-        if (!expect_exception) {
+        if (expect_byref_array) {
+            mrb_full_gc(mrb);
+            if (!borrowed_result_alive(&result, TRUE)) {
+                VariantClear(&result);
+                SysFreeString(name);
+                VariantClear(&target);
+                mrb_raise(mrb, E_RUNTIME_ERROR, "BYREF array element changed after GC");
+            }
+        }
+        else if (expect_byref) mrb_full_gc(mrb);
+        if (!expect_exception && !expect_byref_array) {
             mrb_value ruby_result = ole_variant2val(mrb, &result);
             if (expect_string || expect_byref) {
                 mrb_full_gc(mrb);
@@ -125,11 +160,114 @@ callback_arena_exercise(mrb_state *mrb, mrb_value self)
     return mrb_true_value();
 }
 
+/* Returns an AddRef'ed IDispatch of the first sink advised on the source
+   that knows the given event name, or NULL. */
+static IDispatch *
+find_event_sink(IDispatch *source, LPOLESTR event_name, DISPID *pdispid)
+{
+    IConnectionPointContainer *pcpc = NULL;
+    IEnumConnectionPoints *pecp = NULL;
+    IConnectionPoint *pcp = NULL;
+    IDispatch *found = NULL;
+
+    if (FAILED(source->lpVtbl->QueryInterface(source, &IID_IConnectionPointContainer, (void **)&pcpc)))
+        return NULL;
+    if (FAILED(pcpc->lpVtbl->EnumConnectionPoints(pcpc, &pecp))) {
+        pcpc->lpVtbl->Release(pcpc);
+        return NULL;
+    }
+    while (!found && pecp->lpVtbl->Next(pecp, 1, &pcp, NULL) == S_OK) {
+        IEnumConnections *pec = NULL;
+        CONNECTDATA cd;
+        if (SUCCEEDED(pcp->lpVtbl->EnumConnections(pcp, &pec))) {
+            while (!found && pec->lpVtbl->Next(pec, 1, &cd, NULL) == S_OK) {
+                IDispatch *pdisp = NULL;
+                if (SUCCEEDED(cd.pUnk->lpVtbl->QueryInterface(cd.pUnk, &IID_IDispatch, (void **)&pdisp))) {
+                    if (SUCCEEDED(pdisp->lpVtbl->GetIDsOfNames(pdisp, &IID_NULL, &event_name, 1,
+                                                               LOCALE_USER_DEFAULT, pdispid))) {
+                        found = pdisp;
+                    }
+                    else {
+                        pdisp->lpVtbl->Release(pdisp);
+                    }
+                }
+                cd.pUnk->lpVtbl->Release(cd.pUnk);
+            }
+            pec->lpVtbl->Release(pec);
+        }
+        pcp->lpVtbl->Release(pcp);
+    }
+    pecp->lpVtbl->Release(pecp);
+    pcpc->lpVtbl->Release(pcpc);
+    return found;
+}
+
+/* Invokes the advised WIN32OLE_EVENT sink directly with a result VARIANT and
+   checks that a borrowed result survives a full GC after the callback. */
+static mrb_value
+event_result_arena_exercise(mrb_state *mrb, mrb_value self)
+{
+    mrb_value source;
+    mrb_bool in_array;
+    mrb_int iterations;
+    mrb_int i;
+    VARIANT target;
+    IDispatch *sink;
+    DISPID dispid;
+    DISPPARAMS params;
+    WCHAR event_name[] = L"WillConnect";
+    int arena;
+    const char *failure = NULL;
+
+    mrb_get_args(mrb, "obi", &source, &in_array, &iterations);
+    if (iterations < 1) mrb_raise(mrb, E_ARGUMENT_ERROR, "iterations must be positive");
+
+    VariantInit(&target);
+    ole_val2variant(mrb, source, &target);
+    if (V_VT(&target) != VT_DISPATCH || V_DISPATCH(&target) == NULL) {
+        VariantClear(&target);
+        mrb_raise(mrb, E_RUNTIME_ERROR, "event source did not convert to VT_DISPATCH");
+    }
+    sink = find_event_sink(V_DISPATCH(&target), event_name, &dispid);
+    VariantClear(&target);
+    if (!sink) mrb_raise(mrb, E_RUNTIME_ERROR, "advised event sink was not found");
+
+    memset(&params, 0, sizeof(params));
+    arena = mrb_gc_arena_save(mrb);
+    for (i = 0; i < iterations && !failure; i++) {
+        VARIANT result;
+        HRESULT hr;
+
+        VariantInit(&result);
+        hr = sink->lpVtbl->Invoke(sink, dispid, &IID_NULL, LOCALE_USER_DEFAULT,
+                                  DISPATCH_METHOD, &params, &result, NULL, NULL);
+        if (FAILED(hr)) {
+            failure = "event Invoke failed";
+        }
+        else if (mrb_gc_arena_save(mrb) != arena + 1) {
+            failure = "event Invoke did not keep the result owner in the GC arena";
+        }
+        else {
+            mrb_full_gc(mrb);
+            if (!borrowed_result_alive(&result, in_array)) {
+                failure = "borrowed event result changed after GC";
+            }
+        }
+        VariantClear(&result);
+        mrb_gc_arena_restore(mrb, arena);
+    }
+    sink->lpVtbl->Release(sink);
+    if (failure) mrb_raise(mrb, E_RUNTIME_ERROR, failure);
+    return mrb_true_value();
+}
+
 void
 mrb_mruby_win32ole_gem_test(mrb_state *mrb)
 {
     mrb_define_method(mrb, mrb->object_class, "__win32ole_callback_arena_exercise",
                       callback_arena_exercise, MRB_ARGS_REQ(2));
+    mrb_define_method(mrb, mrb->object_class, "__win32ole_event_result_arena_exercise",
+                      event_result_arena_exercise, MRB_ARGS_REQ(3));
     mrb_mruby_win32ole_reinitialize_test(mrb);
     mrb_mruby_win32ole_early_invoke_test(mrb);
     mrb_mruby_win32ole_bstr_cleanup_test(mrb);
