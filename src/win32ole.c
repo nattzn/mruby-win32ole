@@ -3076,6 +3076,7 @@ ole_invoke2(mrb_state *mrb, mrb_value self, mrb_value dispid, mrb_value args, mr
     mrb_value obj = mrb_nil_value();
     mrb_value tp, param;
     mrb_value v;
+    mrb_value server;
     VARTYPE vt;
 
     mrb_check_type(mrb, args, MRB_TT_ARRAY);
@@ -3085,6 +3086,15 @@ ole_invoke2(mrb_state *mrb, mrb_value self, mrb_value dispid, mrb_value args, mr
     memset(&dispParams, 0, sizeof(DISPPARAMS));
     VariantInit(&result);
     pole = oledata_get_struct(mrb, self);
+    if (!pole || !pole->pDispatch) {
+        server = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "_win32ole_progid"));
+        if (!mrb_string_p(server)) {
+            server = mrb_str_new_cstr(mrb, mrb_obj_classname(mrb, self));
+        }
+        mrb_raisef(mrb, E_RUNTIME_ERROR,
+                   "cannot invoke dispatch ID %S on `%S': WIN32OLE object has been released",
+                   dispid, server);
+    }
 
     dispParams.cArgs = RARRAY_LEN(args);
     dispParams.rgvarg = ALLOCA_N(VARIANTARG, dispParams.cArgs);
@@ -3178,6 +3188,12 @@ ole_invoke2(mrb_state *mrb, mrb_value self, mrb_value dispid, mrb_value args, mr
                                              (VARTYPE)(vt & (~VT_BYREF)));
                     if (hr != S_OK)
                     {
+                        int k;
+                        for (k = 0; k <= i; k++) {
+                            if (V_VT(&realargs[k]) != VT_RECORD) {
+                                VariantClear(&realargs[k]);
+                            }
+                        }
                         mrb_raisef(mrb, E_TYPE_ERROR,
                                    "argument %S for dispatch ID %S cannot be converted from %S to VARIANT type %S",
                                    INT2FIX(j), dispid,
