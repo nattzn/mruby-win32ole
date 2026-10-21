@@ -14,7 +14,7 @@ static mrb_value folevariant_s_allocate(mrb_state *mrb, struct RClass *klass);
 static mrb_value folevariant_s_array(mrb_state *mrb, mrb_value klass);
 static void check_type_val2variant(mrb_state *mrb, mrb_value val);
 static mrb_value folevariant_initialize(mrb_state *mrb, mrb_value self);
-static LONG *ary2safe_array_index(mrb_state *mrb, int ary_size, mrb_value *ary, SAFEARRAY *psa);
+static void ary2safe_array_index(mrb_state *mrb, int ary_size, mrb_value *ary, SAFEARRAY *psa, LONG **pid);
 static SAFEARRAY *get_locked_safe_array(mrb_state *mrb, mrb_value val);
 static mrb_value folevariant_ary_aref(mrb_state *mrb, mrb_value self);
 static mrb_value folevariant_ary_aset(mrb_state *mrb, mrb_value self);
@@ -466,24 +466,22 @@ get_locked_safe_array(mrb_state *mrb, mrb_value val)
     return psa;
 }
 
-static LONG *
-ary2safe_array_index(mrb_state *mrb, int ary_size, mrb_value *ary, SAFEARRAY *psa)
+static void
+ary2safe_array_index(mrb_state *mrb, int ary_size, mrb_value *ary, SAFEARRAY *psa, LONG **pid)
 {
     long dim;
-    LONG *pid;
     long i;
     dim = SafeArrayGetDim(psa);
     if (dim != ary_size) {
         mrb_raise(mrb, E_ARGUMENT_ERROR, "unmatch number of indices");
     }
-    pid = ALLOC_N(LONG, dim);
-    if (pid == NULL) {
+    *pid = ALLOC_N(LONG, dim);
+    if (*pid == NULL) {
         mrb_raise(mrb, E_RUNTIME_ERROR, "failed to allocate memory for indices");
     }
     for (i = 0; i < dim; i++) {
-        pid[i] = NUM2INT(ary[i]);
+        (*pid)[i] = NUM2INT(ary[i]);
     }
-    return pid;
 }
 
 struct safe_array_aref_data {
@@ -500,7 +498,7 @@ safe_array_aref_body(mrb_state *mrb, void *userdata)
     struct safe_array_aref_data *data = userdata;
     HRESULT hr;
 
-    data->pid = ary2safe_array_index(mrb, data->argc, data->argv, data->psa);
+    ary2safe_array_index(mrb, data->argc, data->argv, data->psa, &data->pid);
     hr = SafeArrayPtrOfIndex(data->psa, data->pid, &V_BYREF(&data->variant));
     if (FAILED(hr)) {
         ole_raise(mrb, hr, E_WIN32OLE_RUNTIME_ERROR, "failed to SafeArrayPtrOfIndex");
@@ -524,7 +522,7 @@ safe_array_aset_body(mrb_state *mrb, void *userdata)
     HRESULT hr;
     VOID *p;
 
-    data->pid = ary2safe_array_index(mrb, data->argc - 1, data->argv, data->psa);
+    ary2safe_array_index(mrb, data->argc - 1, data->argv, data->psa, &data->pid);
     p = val2variant_ptr(mrb, data->argv[data->argc - 1], &data->var, data->vt);
     if ((V_VT(&data->var) == VT_DISPATCH && V_DISPATCH(&data->var) == NULL) ||
         (V_VT(&data->var) == VT_UNKNOWN && V_UNKNOWN(&data->var) == NULL)) {
