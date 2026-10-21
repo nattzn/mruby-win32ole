@@ -299,7 +299,7 @@ folevariant_s_array(mrb_state *mrb, mrb_value klass)
     vt = (vt | VT_ARRAY);
     obj = folevariant_s_allocate(mrb, mrb_class_ptr(klass));
 
-    Data_Get_Struct(mrb, obj, &olevariant_datatype, pvar);
+    pvar = ole_data_get_ptr(mrb, obj, &olevariant_datatype);
     dim = RARRAY_LEN(elems);
 
     psab = ALLOC_N(SAFEARRAYBOUND, dim);
@@ -431,7 +431,7 @@ folevariant_initialize(mrb_state *mrb, mrb_value self)
     pvar = olevariantdata_alloc(mrb);
     mrb_data_init(self, pvar, &olevariant_datatype);
 
-    Data_Get_Struct(mrb, self, &olevariant_datatype, pvar);
+    pvar = ole_data_get_ptr(mrb, self, &olevariant_datatype);
     if (len == 1) {
         ole_val2variant(mrb, val, &(pvar->var));
     } else {
@@ -451,7 +451,7 @@ get_locked_safe_array(mrb_state *mrb, mrb_value val)
     struct olevariantdata *pvar;
     SAFEARRAY *psa = NULL;
     HRESULT hr;
-    Data_Get_Struct(mrb, val, &olevariant_datatype, pvar);
+    pvar = ole_data_get_ptr(mrb, val, &olevariant_datatype);
     if (!(V_VT(&(pvar->var)) & VT_ARRAY)) {
         mrb_raise(mrb, E_TYPE_ERROR, "variant type is not VT_ARRAY.");
     }
@@ -569,7 +569,7 @@ folevariant_ary_aref(mrb_state *mrb, mrb_value self)
 
     mrb_get_args(mrb, "*", &argv, &argc);
 
-    Data_Get_Struct(mrb, self, &olevariant_datatype, pvar);
+    pvar = ole_data_get_ptr(mrb, self, &olevariant_datatype);
     if (!V_ISARRAY(&(pvar->var))) {
         mrb_raise(mrb, E_WIN32OLE_RUNTIME_ERROR,
                  "`[]' is not available for this variant type object");
@@ -633,7 +633,7 @@ folevariant_ary_aset(mrb_state *mrb, mrb_value self)
 
     mrb_get_args(mrb, "*", &argv, &argc);
 
-    Data_Get_Struct(mrb, self, &olevariant_datatype, pvar);
+    pvar = ole_data_get_ptr(mrb, self, &olevariant_datatype);
     if (!V_ISARRAY(&(pvar->var))) {
         mrb_raise(mrb, E_WIN32OLE_RUNTIME_ERROR,
                  "`[]' is not available for this variant type object");
@@ -679,7 +679,7 @@ folevariant_value(mrb_state *mrb, mrb_value self)
     VARTYPE vt;
     int dim;
     SAFEARRAY *psa;
-    Data_Get_Struct(mrb, self, &olevariant_datatype, pvar);
+    pvar = ole_data_get_ptr(mrb, self, &olevariant_datatype);
 
     val = ole_variant2val(mrb, &(pvar->var));
     vt = V_VT(&(pvar->var));
@@ -714,7 +714,7 @@ static mrb_value
 folevariant_vartype(mrb_state *mrb, mrb_value self)
 {
     struct olevariantdata *pvar;
-    Data_Get_Struct(mrb, self, &olevariant_datatype, pvar);
+    pvar = ole_data_get_ptr(mrb, self, &olevariant_datatype);
     return INT2FIX(V_VT(&pvar->var));
 }
 
@@ -739,7 +739,7 @@ folevariant_set_value(mrb_state *mrb, mrb_value self)
     struct olevariantdata *pvar;
     VARTYPE vt;
     mrb_get_args(mrb, "o", &val);
-    Data_Get_Struct(mrb, self, &olevariant_datatype, pvar);
+    pvar = ole_data_get_ptr(mrb, self, &olevariant_datatype);
     vt = V_VT(&(pvar->var));
     if (V_ISARRAY(&(pvar->var)) && ((vt & ~VT_BYREF) != (VT_UI1|VT_ARRAY) || !mrb_string_p(val))) {
         mrb_raise(mrb, E_WIN32OLE_RUNTIME_ERROR,
@@ -753,7 +753,7 @@ void
 ole_variant2variant(mrb_state *mrb, mrb_value val, VARIANT *var)
 {
     struct olevariantdata *pvar;
-    Data_Get_Struct(mrb, val, &olevariant_datatype, pvar);
+    pvar = ole_data_get_ptr(mrb, val, &olevariant_datatype);
     VariantCopy(var, &(pvar->var));
 }
 

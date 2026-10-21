@@ -215,7 +215,7 @@ static mrb_value fole_inspect(mrb_state *mrb, mrb_value self);
 static mrb_value ole_ienum_free(mrb_state *mrb, IEnumVARIANT *pEnum);
 static mrb_value fole_each(mrb_state *mrb, mrb_value self);
 static mrb_value fole_missing(mrb_state *mrb, mrb_value self);
-static HRESULT typeinfo_from_ole(mrb_state *mrb, struct oledata *pole, ITypeInfo **ppti);
+static HRESULT typeinfo_from_ole(mrb_state *mrb, mrb_value self, ITypeInfo **ppti);
 static mrb_value ole_methods(mrb_state *mrb, mrb_value self, int mask);
 static mrb_value fole_methods(mrb_state *mrb, mrb_value self);
 static mrb_value fole_get_methods(mrb_state *mrb, mrb_value self);
@@ -994,6 +994,27 @@ oledata_get_struct(mrb_state *mrb, mrb_value ole)
     return pole;
 }
 
+void *
+ole_data_get_ptr(mrb_state *mrb, mrb_value obj, const mrb_data_type *type)
+{
+    void *ptr = mrb_data_get_ptr(mrb, obj, type);
+    if (!ptr) {
+        mrb_raisef(mrb, E_RUNTIME_ERROR, "%s is not initialized",
+                   mrb_obj_classname(mrb, obj));
+    }
+    return ptr;
+}
+
+struct oledata *
+oledata_get_live_struct(mrb_state *mrb, mrb_value obj)
+{
+    struct oledata *pole = oledata_get_struct(mrb, obj);
+    if (!pole || !pole->pDispatch) {
+        mrb_raise(mrb, E_RUNTIME_ERROR, "WIN32OLE object has been released");
+    }
+    return pole;
+}
+
 BSTR
 ole_vstr2wc(mrb_state *mrb, mrb_value vstr)
 {
@@ -1429,7 +1450,7 @@ ole_val2variant(mrb_state *mrb, mrb_value val, VARIANT *var)
 {
     struct oledata *pole = NULL;
     if(mrb_obj_is_kind_of(mrb, val, C_WIN32OLE)) {
-        pole = oledata_get_struct(mrb, val);
+        pole = (struct oledata *)ole_data_get_ptr(mrb, val, &ole_datatype);
         OLE_ADDREF(pole->pDispatch);
         V_VT(var) = VT_DISPATCH;
         V_DISPATCH(var) = pole->pDispatch;
@@ -2266,7 +2287,7 @@ fole_s_const_load(mrb_state *mrb, mrb_value self)
         mrb_raise(mrb, E_TYPE_ERROR, "2nd parameter must be Class or Module");
     }
     if (mrb_obj_is_kind_of(mrb, ole, C_WIN32OLE)) {
-        pole = oledata_get_struct(mrb, ole);
+        pole = oledata_get_live_struct(mrb, ole);
         hr = pole->pDispatch->lpVtbl->GetTypeInfo(pole->pDispatch,
                                                   0, lcid, &pTypeInfo);
         if(FAILED(hr)) {
@@ -2314,7 +2335,7 @@ static ULONG
 reference_count(struct oledata * pole)
 {
     ULONG n = 0;
-    if(pole->pDispatch) {
+    if(pole && pole->pDispatch) {
         OLE_ADDREF(pole->pDispatch);
         n = OLE_RELEASE(pole->pDispatch);
     }
@@ -2356,9 +2377,12 @@ fole_s_free(mrb_state *mrb, mrb_value self)
     ULONG n = 0;
     mrb_get_args(mrb, "o", &obj);
     pole = oledata_get_struct(mrb, obj);
-    if(pole->pDispatch) {
+    if(pole && pole->pDispatch) {
         if (reference_count(pole) > 0) {
             n = OLE_RELEASE(pole->pDispatch);
+            if (n == 0) {
+                pole->pDispatch = NULL;
+            }
         }
     }
     return INT2NUM(n);
@@ -2828,7 +2852,7 @@ ole_invoke(mrb_state *mrb, mrb_int argc, mrb_value *argv, mrb_value self, USHORT
 	cmd = mrb_sym2str(mrb, mrb_symbol(cmd));
     }
     pole = oledata_get_struct(mrb, self);
-    if(!pole->pDispatch) {
+    if(!pole || !pole->pDispatch) {
         server = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "_win32ole_progid"));
         if (!mrb_string_p(server)) {
             server = mrb_str_new_cstr(mrb, mrb_obj_classname(mrb, self));
@@ -3431,7 +3455,7 @@ ole_propertyput(mrb_state *mrb, mrb_value self, mrb_value property, mrb_value va
     VariantInit(&propertyValue[1]);
     memset(&excepinfo, 0, sizeof(excepinfo));
 
-    pole = oledata_get_struct(mrb, self);
+    pole = oledata_get_live_struct(mrb, self);
 
     /* get ID from property name */
     pBuf[0]  = ole_vstr2wc(mrb, property);
@@ -3477,6 +3501,9 @@ fole_free(mrb_state *mrb, mrb_value self)
 {
     struct oledata *pole = NULL;
     pole = oledata_get_struct(mrb, self);
+    if (!pole) {
+        return mrb_nil_value();
+    }
     OLE_FREE(pole->pDispatch);
     pole->pDispatch = NULL;
     return mrb_nil_value();
@@ -3491,7 +3518,7 @@ fole_inspect(mrb_state *mrb, mrb_value self)
     HRESULT hr;
     mrb_value detail = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "_win32ole_progid"));
 
-    if (!pole->pDispatch) {
+    if (!pole || !pole->pDispatch) {
         detail = mrb_string_p(detail) ? mrb_format(mrb, "%S (released)", detail) :
                                        mrb_str_new_lit(mrb, "released");
     }
@@ -3598,7 +3625,7 @@ fole_each(mrb_state *mrb, mrb_value self)
     dispParams.cArgs = 0;
     memset(&excepinfo, 0, sizeof(excepinfo));
 
-    pole = oledata_get_struct(mrb, self);
+    pole = oledata_get_live_struct(mrb, self);
     hr = pole->pDispatch->lpVtbl->Invoke(pole->pDispatch, DISPID_NEWENUM,
                                          &IID_NULL, lcid,
                                          DISPATCH_METHOD | DISPATCH_PROPERTYGET,
@@ -3681,8 +3708,9 @@ fole_missing(mrb_state *mrb, mrb_value self)
 }
 
 static HRESULT
-typeinfo_from_ole(mrb_state *mrb, struct oledata *pole, ITypeInfo **ppti)
+typeinfo_from_ole(mrb_state *mrb, mrb_value self, ITypeInfo **ppti)
 {
+    struct oledata *pole = oledata_get_live_struct(mrb, self);
     ITypeInfo *pTypeInfo;
     ITypeLib *pTypeLib;
     BSTR bstr;
@@ -3727,12 +3755,10 @@ ole_methods(mrb_state *mrb, mrb_value self, int mask)
     ITypeInfo *pTypeInfo;
     HRESULT hr;
     mrb_value methods;
-    struct oledata *pole = NULL;
 
-    pole = oledata_get_struct(mrb, self);
     methods = mrb_ary_new(mrb);
 
-    hr = typeinfo_from_ole(mrb, pole, &pTypeInfo);
+    hr = typeinfo_from_ole(mrb, self, &pTypeInfo);
     if(FAILED(hr))
         return methods;
     mrb_ary_concat(mrb, methods, ole_methods_from_typeinfo(mrb, pTypeInfo, mask));
@@ -3820,11 +3846,10 @@ fole_type(mrb_state *mrb, mrb_value self)
 {
     ITypeInfo *pTypeInfo;
     HRESULT hr;
-    struct oledata *pole = NULL;
     LCID  lcid = cWIN32OLE_lcid;
     mrb_value type = mrb_nil_value();
 
-    pole = oledata_get_struct(mrb, self);
+    struct oledata *pole = oledata_get_live_struct(mrb, self);
 
     hr = pole->pDispatch->lpVtbl->GetTypeInfo( pole->pDispatch, 0, lcid, &pTypeInfo );
     if(FAILED(hr)) {
@@ -3858,7 +3883,7 @@ fole_typelib(mrb_state *mrb, mrb_value self)
     LCID  lcid = cWIN32OLE_lcid;
     mrb_value vtlib = mrb_nil_value();
 
-    pole = oledata_get_struct(mrb, self);
+    pole = oledata_get_live_struct(mrb, self);
     hr = pole->pDispatch->lpVtbl->GetTypeInfo(pole->pDispatch,
                                               0, lcid, &pTypeInfo);
     if(FAILED(hr)) {
@@ -3906,7 +3931,7 @@ fole_query_interface(mrb_state *mrb, mrb_value self)
     }
 
     pole = oledata_get_struct(mrb, self);
-    if(!pole->pDispatch) {
+    if(!pole || !pole->pDispatch) {
         server = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "_win32ole_progid"));
         if (!mrb_string_p(server)) {
             server = mrb_str_new_cstr(mrb, mrb_obj_classname(mrb, self));
@@ -3952,7 +3977,7 @@ fole_respond_to(mrb_state *mrb, mrb_value self)
     if (mrb_symbol_p(method)) {
         method = mrb_sym2str(mrb, mrb_symbol(method));
     }
-    pole = oledata_get_struct(mrb, self);
+    pole = oledata_get_live_struct(mrb, self);
     wcmdname = ole_vstr2wc(mrb, method);
     hr = pole->pDispatch->lpVtbl->GetIDsOfNames( pole->pDispatch, &IID_NULL,
 	    &wcmdname, 1, cWIN32OLE_lcid, &DispID);
@@ -4156,13 +4181,11 @@ fole_method_help(mrb_state *mrb, mrb_value self)
     mrb_value cmdname;
     ITypeInfo *pTypeInfo;
     HRESULT hr;
-    struct oledata *pole;
     mrb_value obj;
 
     mrb_get_args(mrb, "S", &cmdname);
 
-    pole = oledata_get_struct(mrb, self);
-    hr = typeinfo_from_ole(mrb, pole, &pTypeInfo);
+    hr = typeinfo_from_ole(mrb, self, &pTypeInfo);
     if(FAILED(hr))
         ole_raise(mrb, hr, E_RUNTIME_ERROR, "failed to get ITypeInfo");
 
@@ -4204,7 +4227,7 @@ fole_activex_initialize(mrb_state *mrb, mrb_value self)
 
     HRESULT hr = S_OK;
 
-    pole = oledata_get_struct(mrb, self);
+    pole = oledata_get_live_struct(mrb, self);
 
     hr = pole->pDispatch->lpVtbl->QueryInterface(pole->pDispatch, &IID_IPersistMemory, &p);
     pPersistMemory = p;
@@ -4231,7 +4254,7 @@ typelib_from_val(mrb_state *mrb, mrb_value obj, ITypeLib **pTypeLib)
     struct oledata *pole = NULL;
     unsigned int index;
     ITypeInfo *pTypeInfo;
-    pole = oledata_get_struct(mrb, obj);
+    pole = oledata_get_live_struct(mrb, obj);
     hr = pole->pDispatch->lpVtbl->GetTypeInfo(pole->pDispatch,
                                               0, lcid, &pTypeInfo);
     if (FAILED(hr)) {

@@ -108,7 +108,7 @@ ITypeLib *
 itypelib(mrb_state *mrb, mrb_value self)
 {
     struct oletypelibdata *ptlib;
-    Data_Get_Struct(mrb, self, &oletypelib_datatype, ptlib);
+    ptlib = ole_data_get_ptr(mrb, self, &oletypelib_datatype);
     return ptlib->pTypeLib;
 }
 
@@ -201,7 +201,7 @@ static mrb_value
 oletypelib_set_member(mrb_state *mrb, mrb_value self, ITypeLib *pTypeLib)
 {
     struct oletypelibdata *ptlib;
-    Data_Get_Struct(mrb, self, &oletypelib_datatype, ptlib);
+    ptlib = ole_data_get_ptr(mrb, self, &oletypelib_datatype);
     ptlib->pTypeLib = pTypeLib;
     return self;
 }

@@ -69,7 +69,7 @@ hash2olerec(mrb_state *mrb, mrb_value key, mrb_value val, mrb_value rec)
     HRESULT hr;
 
     if (!mrb_nil_p(val)) {
-        Data_Get_Struct(mrb, rec, &olerecord_datatype, prec);
+        prec = ole_data_get_ptr(mrb, rec, &olerecord_datatype);
         pri = prec->pri;
         VariantInit(&var);
         ole_val2variant(mrb, val, &var);
@@ -94,7 +94,7 @@ ole_rec2variant(mrb_state *mrb, mrb_value rec, VARIANT *var)
     mrb_value fields;
     mrb_value keys;
     int i, l;
-    Data_Get_Struct(mrb, rec, &olerecord_datatype, prec);
+    prec = ole_data_get_ptr(mrb, rec, &olerecord_datatype);
     pri = prec->pri;
     if (pri) {
         hr = pri->lpVtbl->GetSize(pri, &size);
@@ -142,7 +142,7 @@ olerecord_set_ivar(mrb_state *mrb, mrb_value obj, IRecordInfo *pri, void *prec)
     struct olerecorddata *pvar;
     int ai;
 
-    Data_Get_Struct(mrb, obj, &olerecord_datatype, pvar);
+    pvar = ole_data_get_ptr(mrb, obj, &olerecord_datatype);
     OLE_ADDREF(pri);
     OLE_RELEASE(pvar->pri);
     pvar->pri = pri;

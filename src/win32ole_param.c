@@ -45,7 +45,7 @@ create_win32ole_param(mrb_state *mrb, ITypeInfo *pTypeInfo, UINT method_index, U
 {
     struct oleparamdata *pparam;
     mrb_value obj = foleparam_s_allocate(mrb, C_WIN32OLE_PARAM);
-    Data_Get_Struct(mrb, obj, &oleparam_datatype, pparam);
+    pparam = ole_data_get_ptr(mrb, obj, &oleparam_datatype);
 
     pparam->pTypeInfo = pTypeInfo;
     OLE_ADDREF(pTypeInfo);
@@ -101,7 +101,7 @@ oleparam_ole_param_from_index_body(mrb_state *mrb, void *userdata)
                    mrb_fixnum_value(data->len));
     }
 
-    Data_Get_Struct(mrb, data->self, &oleparam_datatype, pparam);
+    pparam = ole_data_get_ptr(mrb, data->self, &oleparam_datatype);
     pparam->pTypeInfo = data->pTypeInfo;
     OLE_ADDREF(data->pTypeInfo);
     pparam->method_index = data->method_index;
@@ -248,7 +248,7 @@ static mrb_value
 foleparam_ole_type(mrb_state *mrb, mrb_value self)
 {
     struct oleparamdata *pparam;
-    Data_Get_Struct(mrb, self, &oleparam_datatype, pparam);
+    pparam = ole_data_get_ptr(mrb, self, &oleparam_datatype);
     return ole_param_ole_type(mrb, pparam->pTypeInfo, pparam->method_index,
                               pparam->index);
 }
@@ -282,7 +282,7 @@ static mrb_value
 foleparam_ole_type_detail(mrb_state *mrb, mrb_value self)
 {
     struct oleparamdata *pparam;
-    Data_Get_Struct(mrb, self, &oleparam_datatype, pparam);
+    pparam = ole_data_get_ptr(mrb, self, &oleparam_datatype);
     return ole_param_ole_type_detail(mrb, pparam->pTypeInfo, pparam->method_index,
                                      pparam->index);
 }
@@ -316,7 +316,7 @@ static mrb_value
 foleparam_input(mrb_state *mrb, mrb_value self)
 {
     struct oleparamdata *pparam;
-    Data_Get_Struct(mrb, self, &oleparam_datatype, pparam);
+    pparam = ole_data_get_ptr(mrb, self, &oleparam_datatype);
     return ole_param_flag_mask(mrb, pparam->pTypeInfo, pparam->method_index,
                                pparam->index, PARAMFLAG_FIN);
 }
@@ -344,7 +344,7 @@ static mrb_value
 foleparam_output(mrb_state *mrb, mrb_value self)
 {
     struct oleparamdata *pparam;
-    Data_Get_Struct(mrb, self, &oleparam_datatype, pparam);
+    pparam = ole_data_get_ptr(mrb, self, &oleparam_datatype);
     return ole_param_flag_mask(mrb, pparam->pTypeInfo, pparam->method_index,
                                pparam->index, PARAMFLAG_FOUT);
 }
@@ -363,7 +363,7 @@ static mrb_value
 foleparam_optional(mrb_state *mrb, mrb_value self)
 {
     struct oleparamdata *pparam;
-    Data_Get_Struct(mrb, self, &oleparam_datatype, pparam);
+    pparam = ole_data_get_ptr(mrb, self, &oleparam_datatype);
     return ole_param_flag_mask(mrb, pparam->pTypeInfo, pparam->method_index,
                                pparam->index, PARAMFLAG_FOPT);
 }
@@ -383,7 +383,7 @@ static mrb_value
 foleparam_retval(mrb_state *mrb, mrb_value self)
 {
     struct oleparamdata *pparam;
-    Data_Get_Struct(mrb, self, &oleparam_datatype, pparam);
+    pparam = ole_data_get_ptr(mrb, self, &oleparam_datatype);
     return ole_param_flag_mask(mrb, pparam->pTypeInfo, pparam->method_index,
                                pparam->index, PARAMFLAG_FRETVAL);
 }
@@ -444,7 +444,7 @@ static mrb_value
 foleparam_default(mrb_state *mrb, mrb_value self)
 {
     struct oleparamdata *pparam;
-    Data_Get_Struct(mrb, self, &oleparam_datatype, pparam);
+    pparam = ole_data_get_ptr(mrb, self, &oleparam_datatype);
     return ole_param_default(mrb, pparam->pTypeInfo, pparam->method_index,
                              pparam->index);
 }

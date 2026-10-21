@@ -70,7 +70,7 @@ oletype_free(mrb_state *mrb, void *ptr)
 ITypeInfo *itypeinfo(mrb_state *mrb, mrb_value self)
 {
     struct oletypedata *ptype;
-    Data_Get_Struct(mrb, self, &oletype_datatype, ptype);
+    ptype = ole_data_get_ptr(mrb, self, &oletype_datatype);
     return ptype->pTypeInfo;
 }
 
@@ -198,7 +198,7 @@ static mrb_value
 oletype_set_member(mrb_state *mrb, mrb_value self, ITypeInfo *pTypeInfo, mrb_value name)
 {
     struct oletypedata *ptype;
-    Data_Get_Struct(mrb, self, &oletype_datatype, ptype);
+    ptype = ole_data_get_ptr(mrb, self, &oletype_datatype);
     mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "name"), name);
     ptype->pTypeInfo = pTypeInfo;
     OLE_ADDREF(pTypeInfo);

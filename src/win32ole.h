@@ -162,6 +162,8 @@ extern const mrb_data_type ole_datatype;
 extern LCID cWIN32OLE_lcid;
 
 struct oledata *oledata_get_struct(mrb_state *mrb, mrb_value obj);
+void *ole_data_get_ptr(mrb_state *mrb, mrb_value obj, const mrb_data_type *type);
+struct oledata *oledata_get_live_struct(mrb_state *mrb, mrb_value obj);
 BSTR ole_vstr2wc(mrb_state *mrb, mrb_value vstr);
 LONG reg_open_key(HKEY hkey, const char *name, HKEY *phkey);
 LONG reg_open_vkey(mrb_state *mrb, HKEY hkey, mrb_value key, HKEY *phkey);

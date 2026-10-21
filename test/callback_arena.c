@@ -5,6 +5,7 @@
 void mrb_mruby_win32ole_reinitialize_test(mrb_state *mrb);
 void mrb_mruby_win32ole_early_invoke_test(mrb_state *mrb);
 void mrb_mruby_win32ole_bstr_cleanup_test(mrb_state *mrb);
+void mrb_mruby_win32ole_object_state_test(mrb_state *mrb);
 
 static mrb_value
 callback_arena_exercise(mrb_state *mrb, mrb_value self)
@@ -132,4 +133,5 @@ mrb_mruby_win32ole_gem_test(mrb_state *mrb)
     mrb_mruby_win32ole_reinitialize_test(mrb);
     mrb_mruby_win32ole_early_invoke_test(mrb);
     mrb_mruby_win32ole_bstr_cleanup_test(mrb);
+    mrb_mruby_win32ole_object_state_test(mrb);
 }

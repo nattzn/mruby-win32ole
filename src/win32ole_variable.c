@@ -122,7 +122,7 @@ static mrb_value
 folevariable_ole_type(mrb_state *mrb, mrb_value self)
 {
     struct olevariabledata *pvar;
-    Data_Get_Struct(mrb, self, &olevariable_datatype, pvar);
+    pvar = ole_data_get_ptr(mrb, self, &olevariable_datatype);
     return ole_variable_ole_type(mrb, pvar->pTypeInfo, pvar->index);
 }
 
@@ -156,7 +156,7 @@ static mrb_value
 folevariable_ole_type_detail(mrb_state *mrb, mrb_value self)
 {
     struct olevariabledata *pvar;
-    Data_Get_Struct(mrb, self, &olevariable_datatype, pvar);
+    pvar = ole_data_get_ptr(mrb, self, &olevariable_datatype);
     return ole_variable_ole_type_detail(mrb, pvar->pTypeInfo, pvar->index);
 }
 
@@ -200,7 +200,7 @@ static mrb_value
 folevariable_value(mrb_state *mrb, mrb_value self)
 {
     struct olevariabledata *pvar;
-    Data_Get_Struct(mrb, self, &olevariable_datatype, pvar);
+    pvar = ole_data_get_ptr(mrb, self, &olevariable_datatype);
     return ole_variable_value(mrb, pvar->pTypeInfo, pvar->index);
 }
 
@@ -246,7 +246,7 @@ static mrb_value
 folevariable_visible(mrb_state *mrb, mrb_value self)
 {
     struct olevariabledata *pvar;
-    Data_Get_Struct(mrb, self, &olevariable_datatype, pvar);
+    pvar = ole_data_get_ptr(mrb, self, &olevariable_datatype);
     return ole_variable_visible(mrb, pvar->pTypeInfo, pvar->index);
 }
 
@@ -302,7 +302,7 @@ static mrb_value
 folevariable_variable_kind(mrb_state *mrb, mrb_value self)
 {
     struct olevariabledata *pvar;
-    Data_Get_Struct(mrb, self, &olevariable_datatype, pvar);
+    pvar = ole_data_get_ptr(mrb, self, &olevariable_datatype);
     return ole_variable_kind(mrb, pvar->pTypeInfo, pvar->index);
 }
 
@@ -342,7 +342,7 @@ static mrb_value
 folevariable_varkind(mrb_state *mrb, mrb_value self)
 {
     struct olevariabledata *pvar;
-    Data_Get_Struct(mrb, self, &olevariable_datatype, pvar);
+    pvar = ole_data_get_ptr(mrb, self, &olevariable_datatype);
     return ole_variable_varkind(mrb, pvar->pTypeInfo, pvar->index);
 }
 

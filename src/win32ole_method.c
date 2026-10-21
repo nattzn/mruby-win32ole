@@ -60,7 +60,7 @@ struct olemethoddata *
 olemethod_data_get_struct(mrb_state *mrb, mrb_value obj)
 {
     struct olemethoddata *pmethod;
-    Data_Get_Struct(mrb, obj, &olemethod_datatype, pmethod);
+    pmethod = ole_data_get_ptr(mrb, obj, &olemethod_datatype);
     return pmethod;
 }
 
@@ -223,7 +223,7 @@ static mrb_value
 olemethod_set_member(mrb_state *mrb, mrb_value self, ITypeInfo *pTypeInfo, ITypeInfo *pOwnerTypeInfo, int index, mrb_value name)
 {
     struct olemethoddata *pmethod;
-    Data_Get_Struct(mrb, self, &olemethod_datatype, pmethod);
+    pmethod = ole_data_get_ptr(mrb, self, &olemethod_datatype);
     pmethod->pTypeInfo = pTypeInfo;
     OLE_ADDREF(pTypeInfo);
     pmethod->pOwnerTypeInfo = pOwnerTypeInfo;
@@ -345,7 +345,7 @@ static mrb_value
 folemethod_return_type(mrb_state *mrb, mrb_value self)
 {
     struct olemethoddata *pmethod;
-    Data_Get_Struct(mrb, self, &olemethod_datatype, pmethod);
+    pmethod = ole_data_get_ptr(mrb, self, &olemethod_datatype);
     return ole_method_return_type(mrb, pmethod->pTypeInfo, pmethod->index);
 }
 
@@ -379,7 +379,7 @@ static mrb_value
 folemethod_return_vtype(mrb_state *mrb, mrb_value self)
 {
     struct olemethoddata *pmethod;
-    Data_Get_Struct(mrb, self, &olemethod_datatype, pmethod);
+    pmethod = ole_data_get_ptr(mrb, self, &olemethod_datatype);
     return ole_method_return_vtype(mrb, pmethod->pTypeInfo, pmethod->index);
 }
 
@@ -413,7 +413,7 @@ static mrb_value
 folemethod_return_type_detail(mrb_state *mrb, mrb_value self)
 {
     struct olemethoddata *pmethod;
-    Data_Get_Struct(mrb, self, &olemethod_datatype, pmethod);
+    pmethod = ole_data_get_ptr(mrb, self, &olemethod_datatype);
     return ole_method_return_type_detail(mrb, pmethod->pTypeInfo, pmethod->index);
 }
 
@@ -465,7 +465,7 @@ static mrb_value
 folemethod_invkind(mrb_state *mrb, mrb_value self)
 {
     struct olemethoddata *pmethod;
-    Data_Get_Struct(mrb, self, &olemethod_datatype, pmethod);
+    pmethod = ole_data_get_ptr(mrb, self, &olemethod_datatype);
     return ole_method_invkind(mrb, pmethod->pTypeInfo, pmethod->index);
 }
 
@@ -484,7 +484,7 @@ static mrb_value
 folemethod_invoke_kind(mrb_state *mrb, mrb_value self)
 {
     struct olemethoddata *pmethod;
-    Data_Get_Struct(mrb, self, &olemethod_datatype, pmethod);
+    pmethod = ole_data_get_ptr(mrb, self, &olemethod_datatype);
     return ole_method_invoke_kind(mrb, pmethod->pTypeInfo, pmethod->index);
 }
 
@@ -521,7 +521,7 @@ static mrb_value
 folemethod_visible(mrb_state *mrb, mrb_value self)
 {
     struct olemethoddata *pmethod;
-    Data_Get_Struct(mrb, self, &olemethod_datatype, pmethod);
+    pmethod = ole_data_get_ptr(mrb, self, &olemethod_datatype);
     return ole_method_visible(mrb, pmethod->pTypeInfo, pmethod->index);
 }
 
@@ -607,7 +607,7 @@ static mrb_value
 folemethod_event(mrb_state *mrb, mrb_value self)
 {
     struct olemethoddata *pmethod;
-    Data_Get_Struct(mrb, self, &olemethod_datatype, pmethod);
+    pmethod = ole_data_get_ptr(mrb, self, &olemethod_datatype);
     if (!pmethod->pOwnerTypeInfo)
         return mrb_false_value();
     return ole_method_event(mrb, pmethod->pOwnerTypeInfo,
@@ -630,7 +630,7 @@ folemethod_event_interface(mrb_state *mrb, mrb_value self)
     BSTR name;
     struct olemethoddata *pmethod;
     HRESULT hr;
-    Data_Get_Struct(mrb, self, &olemethod_datatype, pmethod);
+    pmethod = ole_data_get_ptr(mrb, self, &olemethod_datatype);
     if(mrb_bool(folemethod_event(mrb, self))) {
         hr = ole_docinfo_from_type(mrb, pmethod->pTypeInfo, &name, NULL, NULL, NULL);
         if(SUCCEEDED(hr))
@@ -689,7 +689,7 @@ static mrb_value
 folemethod_helpstring(mrb_state *mrb, mrb_value self)
 {
     struct olemethoddata *pmethod;
-    Data_Get_Struct(mrb, self, &olemethod_datatype, pmethod);
+    pmethod = ole_data_get_ptr(mrb, self, &olemethod_datatype);
     return ole_method_helpstring(mrb, pmethod->pTypeInfo, pmethod->index);
 }
 
@@ -719,7 +719,7 @@ static mrb_value
 folemethod_helpfile(mrb_state *mrb, mrb_value self)
 {
     struct olemethoddata *pmethod;
-    Data_Get_Struct(mrb, self, &olemethod_datatype, pmethod);
+    pmethod = ole_data_get_ptr(mrb, self, &olemethod_datatype);
 
     return ole_method_helpfile(mrb, pmethod->pTypeInfo, pmethod->index);
 }
@@ -749,7 +749,7 @@ static mrb_value
 folemethod_helpcontext(mrb_state *mrb, mrb_value self)
 {
     struct olemethoddata *pmethod;
-    Data_Get_Struct(mrb, self, &olemethod_datatype, pmethod);
+    pmethod = ole_data_get_ptr(mrb, self, &olemethod_datatype);
     return ole_method_helpcontext(mrb, pmethod->pTypeInfo, pmethod->index);
 }
 
@@ -780,7 +780,7 @@ static mrb_value
 folemethod_dispid(mrb_state *mrb, mrb_value self)
 {
     struct olemethoddata *pmethod;
-    Data_Get_Struct(mrb, self, &olemethod_datatype, pmethod);
+    pmethod = ole_data_get_ptr(mrb, self, &olemethod_datatype);
     return ole_method_dispid(mrb, pmethod->pTypeInfo, pmethod->index);
 }
 
@@ -811,7 +811,7 @@ static mrb_value
 folemethod_offset_vtbl(mrb_state *mrb, mrb_value self)
 {
     struct olemethoddata *pmethod;
-    Data_Get_Struct(mrb, self, &olemethod_datatype, pmethod);
+    pmethod = ole_data_get_ptr(mrb, self, &olemethod_datatype);
     return ole_method_offset_vtbl(mrb, pmethod->pTypeInfo, pmethod->index);
 }
 
@@ -843,7 +843,7 @@ static mrb_value
 folemethod_size_params(mrb_state *mrb, mrb_value self)
 {
     struct olemethoddata *pmethod;
-    Data_Get_Struct(mrb, self, &olemethod_datatype, pmethod);
+    pmethod = ole_data_get_ptr(mrb, self, &olemethod_datatype);
     return ole_method_size_params(mrb, pmethod->pTypeInfo, pmethod->index);
 }
 
@@ -874,7 +874,7 @@ static mrb_value
 folemethod_size_opt_params(mrb_state *mrb, mrb_value self)
 {
     struct olemethoddata *pmethod;
-    Data_Get_Struct(mrb, self, &olemethod_datatype, pmethod);
+    pmethod = ole_data_get_ptr(mrb, self, &olemethod_datatype);
     return ole_method_size_opt_params(mrb, pmethod->pTypeInfo, pmethod->index);
 }
 
@@ -929,7 +929,7 @@ static mrb_value
 folemethod_params(mrb_state *mrb, mrb_value self)
 {
     struct olemethoddata *pmethod;
-    Data_Get_Struct(mrb, self, &olemethod_datatype, pmethod);
+    pmethod = ole_data_get_ptr(mrb, self, &olemethod_datatype);
     return ole_method_params(mrb, pmethod->pTypeInfo, pmethod->index);
 }
 

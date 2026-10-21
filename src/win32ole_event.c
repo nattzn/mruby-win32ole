@@ -607,7 +607,7 @@ find_iid(mrb_state *mrb, mrb_value ole, const char *pitf, IID *piid, ITypeInfo *
     BOOL is_found = FALSE;
     LCID    lcid = cWIN32OLE_lcid;
 
-    pole = oledata_get_struct(mrb, ole);
+    pole = oledata_get_live_struct(mrb, ole);
 
     pDispatch = pole->pDispatch;
 
@@ -824,7 +824,7 @@ find_default_source(mrb_state *mrb, mrb_value ole, IID *piid, ITypeInfo **ppType
 
     struct oledata *pole = NULL;
 
-    pole = oledata_get_struct(mrb, ole);
+    pole = oledata_get_live_struct(mrb, ole);
     pDispatch = pole->pDispatch;
     hr = pDispatch->lpVtbl->QueryInterface(pDispatch,
                                            &IID_IProvideClassInfo2,
@@ -1025,6 +1025,10 @@ ev_advise(mrb_state *mrb, mrb_int argc, mrb_value *argv, mrb_value self)
         mrb_raise(mrb, E_TYPE_ERROR, "1st parameter must be WIN32OLE object");
     }
 
+    poleev = ole_data_get_ptr(mrb, self, &oleevent_datatype);
+    pole = oledata_get_live_struct(mrb, ole);
+    pDispatch = pole->pDispatch;
+
     if(!mrb_nil_p(itf)) {
         pitf = ole_obj_to_cstr(mrb, itf);
         /*
@@ -1042,8 +1046,6 @@ ev_advise(mrb_state *mrb, mrb_int argc, mrb_value *argv, mrb_value self)
         ole_raise(mrb, hr, E_RUNTIME_ERROR, "interface not found");
     }
 
-    pole = oledata_get_struct(mrb, ole);
-    pDispatch = pole->pDispatch;
     hr = pDispatch->lpVtbl->QueryInterface(pDispatch,
                                            &IID_IConnectionPointContainer,
                                            &p);
@@ -1074,7 +1076,6 @@ ev_advise(mrb_state *mrb, mrb_int argc, mrb_value *argv, mrb_value self)
         ole_raise(mrb, hr, E_RUNTIME_ERROR, "Advise Error");
     }
 
-    Data_Get_Struct(mrb, self, &oleevent_datatype, poleev);
     pIEV->m_event_id = evs_length(mrb);
     pIEV->pTypeInfo = pTypeInfo;
     poleev->dwCookie = dwCookie;
@@ -1163,7 +1164,7 @@ ev_on_event(mrb_state *mrb, mrb_int argc, mrb_value *argv, mrb_value self, mrb_v
     struct oleeventdata *poleev;
     mrb_value event, args, data;
     int i;
-    Data_Get_Struct(mrb, self, &oleevent_datatype, poleev);
+    poleev = ole_data_get_ptr(mrb, self, &oleevent_datatype);
     if (poleev->pConnectionPoint == NULL) {
         mrb_raise(mrb, E_WIN32OLE_RUNTIME_ERROR, "IConnectionPoint not found. You must call advise at first.");
     }
@@ -1310,7 +1311,7 @@ static mrb_value
 fev_unadvise(mrb_state *mrb, mrb_value self)
 {
     struct oleeventdata *poleev;
-    Data_Get_Struct(mrb, self, &oleevent_datatype, poleev);
+    poleev = ole_data_get_ptr(mrb, self, &oleevent_datatype);
     if (poleev->pConnectionPoint) {
         ole_msg_loop();
         evs_delete(mrb, poleev->event_id);
