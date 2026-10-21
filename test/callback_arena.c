@@ -2,6 +2,8 @@
 #include <mruby/gc.h>
 #include <string.h>
 
+void mrb_mruby_win32ole_reinitialize_test(mrb_state *mrb);
+
 static mrb_value
 callback_arena_exercise(mrb_state *mrb, mrb_value self)
 {
@@ -125,4 +127,5 @@ mrb_mruby_win32ole_gem_test(mrb_state *mrb)
 {
     mrb_define_method(mrb, mrb->object_class, "__win32ole_callback_arena_exercise",
                       callback_arena_exercise, MRB_ARGS_REQ(2));
+    mrb_mruby_win32ole_reinitialize_test(mrb);
 }

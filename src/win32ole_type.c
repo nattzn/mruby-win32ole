@@ -289,7 +289,7 @@ foletype_initialize(mrb_state *mrb, mrb_value self)
 
     poletype = (struct oletypedata *)DATA_PTR(self);
     if (poletype) {
-        mrb_free(mrb, poletype);
+        oletype_free(mrb, poletype);
     }
     mrb_data_init(self, NULL, &oletype_datatype);
 

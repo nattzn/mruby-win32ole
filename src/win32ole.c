@@ -2672,7 +2672,7 @@ fole_initialize(mrb_state *mrb, mrb_value self)
     void *p;
 	struct oledata *pole = (struct oledata *)DATA_PTR(self);
     if (pole) {
-        mrb_free(mrb, pole);
+        ole_free(mrb, pole);
     }
     mrb_data_init(self, NULL, &ole_datatype);
 

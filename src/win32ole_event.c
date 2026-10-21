@@ -1066,8 +1066,11 @@ fev_initialize(mrb_state *mrb, mrb_value self)
     mrb_int argc;
     mrb_value *argv;
     struct oleeventdata *poleev = (struct oleeventdata *)DATA_PTR(self);
+    if (poleev && poleev->pConnectionPoint) {
+        evs_delete(mrb, poleev->event_id);
+    }
     if (poleev) {
-        mrb_free(mrb, poleev);
+        oleevent_free(mrb, poleev);
     }
     mrb_data_init(self, NULL, &oleevent_datatype);
 

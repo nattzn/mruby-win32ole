@@ -435,7 +435,7 @@ foletypelib_initialize(mrb_state *mrb, mrb_value self)
 
     struct oletypelibdata *ptlib = (struct oletypelibdata *)DATA_PTR(self);
     if (ptlib) {
-        mrb_free(mrb, ptlib);
+        oletypelib_free(mrb, ptlib);
     }
     mrb_data_init(self, NULL, &oletypelib_datatype);
 
