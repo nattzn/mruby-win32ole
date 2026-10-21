@@ -433,10 +433,13 @@ static HRESULT ( STDMETHODCALLTYPE GetIDsOfNames )(
     mrb_state *mrb = p->mrb;
     struct get_ids_of_names_data data = { rgszNames, rgDispId, NULL, S_OK };
     mrb_bool error;
+    int ai;
 
     if (!rgszNames || cNames == 0 || !rgDispId) return E_INVALIDARG;
+    ai = mrb_gc_arena_save(mrb);
     mrb_protect_error(mrb, get_ids_of_names_body, &data, &error);
     if (data.psz) mrb_free(mrb, data.psz);
+    mrb_gc_arena_restore(mrb, ai);
     return error ? DISP_E_EXCEPTION : data.hr;
 }
 
@@ -487,8 +490,11 @@ static /* [local] */ HRESULT ( STDMETHODCALLTYPE Invoke )(
     /* [out] */ UINT __RPC_FAR *puArgErr)
 {
     Win32OLEIDispatch* p = (Win32OLEIDispatch*)This;
+    mrb_state *mrb = p->mrb;
     int args;
+    int ai;
     mrb_bool error;
+    mrb_value result;
     struct invoke_data data;
 
     if (!pDispParams) return E_INVALIDARG;
@@ -500,14 +506,21 @@ static /* [local] */ HRESULT ( STDMETHODCALLTYPE Invoke )(
     data.pVarResult = pVarResult;
     data.parg = ALLOCA_N(mrb_value, args);
     if (pVarResult) VariantInit(pVarResult);
-    mrb_protect_error(p->mrb, invoke_body, &data, &error);
+    ai = mrb_gc_arena_save(mrb);
+    result = mrb_protect_error(mrb, invoke_body, &data, &error);
     if (error) {
         if (pVarResult) VariantClear(pVarResult);
         if (pExcepInfo) {
             memset(pExcepInfo, 0, sizeof(*pExcepInfo));
             pExcepInfo->scode = DISP_E_EXCEPTION;
         }
+        mrb_gc_arena_restore(mrb, ai);
         return DISP_E_EXCEPTION;
+    }
+    mrb_gc_arena_restore(mrb, ai);
+    /* Keep Ruby owners alive for VARIANT results that borrow their storage. */
+    if (pVarResult && (mrb_data_p(result) || mrb_array_p(result))) {
+        mrb_gc_protect(mrb, result);
     }
     return S_OK;
 }
@@ -541,6 +554,7 @@ val2dispatch(mrb_state *mrb, mrb_value val)
         pdisp = ALLOC(Win32OLEIDispatch);
         pdisp->dispatch.lpVtbl = &com_vtbl;
         pdisp->refcount = 1;
+        pdisp->mrb = mrb;
         pdisp->obj = val;
         mrb_hash_set(mrb, com_hash, val, mrb_cptr_value(mrb, pdisp));
     }

@@ -259,22 +259,27 @@ EVENTSINK_Invoke(
     UINT *puArgErr
     ) {
     PIEVENTSINKOBJ pEV = (PIEVENTSINKOBJ)pEventSink;
+    mrb_state *mrb = pEV->mrb;
     struct eventsink_invoke_data data = {
         pEventSink, dispid, riid, lcid, wFlags, pdispparams,
         pvarResult, pexcepinfo, puArgErr, NOERROR
     };
     mrb_bool error;
+    int ai;
 
     if (pvarResult) VariantInit(pvarResult);
-    mrb_protect_error(pEV->mrb, eventsink_invoke_body, &data, &error);
+    ai = mrb_gc_arena_save(mrb);
+    mrb_protect_error(mrb, eventsink_invoke_body, &data, &error);
     if (error) {
         if (pvarResult) VariantClear(pvarResult);
         if (pexcepinfo) {
             memset(pexcepinfo, 0, sizeof(*pexcepinfo));
             pexcepinfo->scode = DISP_E_EXCEPTION;
         }
+        mrb_gc_arena_restore(mrb, ai);
         return DISP_E_EXCEPTION;
     }
+    mrb_gc_arena_restore(mrb, ai);
     return data.hr;
 }
 
