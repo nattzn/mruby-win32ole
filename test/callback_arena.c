@@ -6,13 +6,14 @@ void mrb_mruby_win32ole_reinitialize_test(mrb_state *mrb);
 void mrb_mruby_win32ole_early_invoke_test(mrb_state *mrb);
 void mrb_mruby_win32ole_bstr_cleanup_test(mrb_state *mrb);
 void mrb_mruby_win32ole_object_state_test(mrb_state *mrb);
+void mrb_mruby_win32ole_record_result_test(mrb_state *mrb);
 
-static const WCHAR borrowed_text[] = L"callback result";
+static const WCHAR result_text[] = L"callback result";
 
-/* Checks that a BYREF BSTR (optionally inside a VARIANT array) still points
-   to live data after the Ruby side ran a full GC. */
+/* Checks that callback results own their BSTR data after the Ruby side ran a
+   full GC. */
 static BOOL
-borrowed_result_alive(VARIANT *result, BOOL in_array)
+owned_result_alive(VARIANT *result, BOOL in_array)
 {
     VARIANT *elem = result;
     BOOL ok;
@@ -24,9 +25,33 @@ borrowed_result_alive(VARIANT *result, BOOL in_array)
         if (!psa || SafeArrayGetDim(psa) != 1 || psa->rgsabound[0].cElements != 1) return FALSE;
         if (FAILED(SafeArrayAccessData(psa, (void **)&elem))) return FALSE;
     }
-    ok = V_VT(elem) == (VT_BSTR | VT_BYREF) && V_BSTRREF(elem) && *V_BSTRREF(elem) &&
-         wcscmp(*V_BSTRREF(elem), borrowed_text) == 0;
+    ok = V_VT(elem) == VT_BSTR && V_BSTR(elem) &&
+         wcscmp(V_BSTR(elem), result_text) == 0;
     if (in_array) SafeArrayUnaccessData(V_ARRAY(result));
+    return ok;
+}
+
+static BOOL
+owned_nested_result_alive(VARIANT *result)
+{
+    SAFEARRAY *outer, *inner;
+    VARIANT *outer_elem, *inner_elem;
+    BOOL ok = FALSE;
+
+    if (V_VT(result) != (VT_ARRAY | VT_VARIANT)) return FALSE;
+    outer = V_ARRAY(result);
+    if (!outer || SafeArrayGetDim(outer) != 1 || outer->rgsabound[0].cElements != 1 ||
+        FAILED(SafeArrayAccessData(outer, (void **)&outer_elem))) return FALSE;
+    if (V_VT(outer_elem) == (VT_ARRAY | VT_VARIANT)) {
+        inner = V_ARRAY(outer_elem);
+        if (inner && SafeArrayGetDim(inner) == 1 && inner->rgsabound[0].cElements == 1 &&
+            SUCCEEDED(SafeArrayAccessData(inner, (void **)&inner_elem))) {
+            ok = V_VT(inner_elem) == VT_BSTR && V_BSTR(inner_elem) &&
+                 wcscmp(V_BSTR(inner_elem), result_text) == 0;
+            SafeArrayUnaccessData(inner);
+        }
+    }
+    SafeArrayUnaccessData(outer);
     return ok;
 }
 
@@ -46,12 +71,16 @@ callback_arena_exercise(mrb_state *mrb, mrb_value self)
     BOOL expect_string;
     BOOL expect_byref;
     BOOL expect_byref_array;
+    BOOL expect_nested_array;
+    BOOL mutate_source;
 
     mrb_get_args(mrb, "zi", &method, &iterations);
     expect_exception = strcmp(method, "raise_error") == 0;
     expect_string = strcmp(method, "string_result") == 0;
     expect_byref = strcmp(method, "byref_result") == 0;
     expect_byref_array = strcmp(method, "byref_array_result") == 0;
+    expect_nested_array = strcmp(method, "nested_byref_array_result") == 0;
+    mutate_source = expect_byref || expect_byref_array || expect_nested_array;
     if (iterations < 1) mrb_raise(mrb, E_ARGUMENT_ERROR, "iterations must be positive");
 
     VariantInit(&target);
@@ -106,32 +135,44 @@ callback_arena_exercise(mrb_state *mrb, mrb_value self)
             VariantClear(&target);
             mrb_raise(mrb, E_RUNTIME_ERROR, "Invoke failed");
         }
-        else if (expect_byref_array ? V_VT(&result) != (VT_ARRAY | VT_VARIANT) :
-                 expect_byref ? V_VT(&result) != (VT_BSTR | VT_BYREF) :
+        else if ((expect_byref_array || expect_nested_array) ? V_VT(&result) != (VT_ARRAY | VT_VARIANT) :
+                 expect_byref ? V_VT(&result) != VT_BSTR :
                  (expect_string ? V_VT(&result) != VT_BSTR : V_VT(&result) != VT_I4)) {
             VariantClear(&result);
             SysFreeString(name);
             VariantClear(&target);
             mrb_raise(mrb, E_RUNTIME_ERROR, "Invoke returned an unexpected VARIANT type");
         }
-        if (mrb_gc_arena_save(mrb) != arena + ((expect_byref || expect_byref_array) ? 1 : 0)) {
+        if (mrb_gc_arena_save(mrb) != arena) {
             VariantClear(&result);
             SysFreeString(name);
             VariantClear(&target);
             mrb_raise(mrb, E_RUNTIME_ERROR, "Invoke changed the GC arena index");
         }
 
-        if (expect_byref_array) {
+        if (mutate_source) {
+            mrb_funcall(mrb, self, "mutate_result_source", 0);
+        }
+        if (expect_byref_array || expect_nested_array) {
             mrb_full_gc(mrb);
-            if (!borrowed_result_alive(&result, TRUE)) {
+            if (expect_nested_array ? !owned_nested_result_alive(&result) :
+                !owned_result_alive(&result, TRUE)) {
                 VariantClear(&result);
                 SysFreeString(name);
                 VariantClear(&target);
-                mrb_raise(mrb, E_RUNTIME_ERROR, "BYREF array element changed after GC");
+                mrb_raise(mrb, E_RUNTIME_ERROR, "owned array element changed after GC");
             }
         }
-        else if (expect_byref) mrb_full_gc(mrb);
-        if (!expect_exception && !expect_byref_array) {
+        else if (expect_byref) {
+            mrb_full_gc(mrb);
+            if (!owned_result_alive(&result, FALSE)) {
+                VariantClear(&result);
+                SysFreeString(name);
+                VariantClear(&target);
+                mrb_raise(mrb, E_RUNTIME_ERROR, "owned BYREF result changed after GC");
+            }
+        }
+        if (!expect_exception && !expect_byref_array && !expect_nested_array) {
             mrb_value ruby_result = ole_variant2val(mrb, &result);
             if (expect_string || expect_byref) {
                 mrb_full_gc(mrb);
@@ -203,7 +244,7 @@ find_event_sink(IDispatch *source, LPOLESTR event_name, DISPID *pdispid)
 }
 
 /* Invokes the advised WIN32OLE_EVENT sink directly with a result VARIANT and
-   checks that a borrowed result survives a full GC after the callback. */
+   checks that an owned result survives a full GC after the callback. */
 static mrb_value
 event_result_arena_exercise(mrb_state *mrb, mrb_value self)
 {
@@ -244,13 +285,13 @@ event_result_arena_exercise(mrb_state *mrb, mrb_value self)
         if (FAILED(hr)) {
             failure = "event Invoke failed";
         }
-        else if (mrb_gc_arena_save(mrb) != arena + 1) {
-            failure = "event Invoke did not keep the result owner in the GC arena";
+        else if (mrb_gc_arena_save(mrb) != arena) {
+            failure = "event Invoke changed the GC arena index";
         }
         else {
             mrb_full_gc(mrb);
-            if (!borrowed_result_alive(&result, in_array)) {
-                failure = "borrowed event result changed after GC";
+            if (!owned_result_alive(&result, in_array)) {
+                failure = "owned event result changed after GC";
             }
         }
         VariantClear(&result);
@@ -272,4 +313,5 @@ mrb_mruby_win32ole_gem_test(mrb_state *mrb)
     mrb_mruby_win32ole_early_invoke_test(mrb);
     mrb_mruby_win32ole_bstr_cleanup_test(mrb);
     mrb_mruby_win32ole_object_state_test(mrb);
+    mrb_mruby_win32ole_record_result_test(mrb);
 }

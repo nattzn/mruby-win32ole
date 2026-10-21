@@ -753,8 +753,12 @@ void
 ole_variant2variant(mrb_state *mrb, mrb_value val, VARIANT *var)
 {
     struct olevariantdata *pvar;
+    HRESULT hr;
     pvar = ole_data_get_ptr(mrb, val, &olevariant_datatype);
-    VariantCopy(var, &(pvar->var));
+    hr = VariantCopy(var, &(pvar->var));
+    if (FAILED(hr)) {
+        ole_raise(mrb, hr, E_WIN32OLE_RUNTIME_ERROR, "failed to copy variant");
+    }
 }
 
 void

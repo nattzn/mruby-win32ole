@@ -182,10 +182,10 @@ HRESULT ole_docinfo_from_type(mrb_state *mrb, ITypeInfo *pTypeInfo, BSTR *name, 
 mrb_value ole_typedesc2val(mrb_state *mrb, ITypeInfo *pTypeInfo, TYPEDESC *pTypeDesc, mrb_value typedetails);
 mrb_value make_inspect(mrb_state *mrb, const char *class_name, mrb_value detail);
 void ole_val2variant(mrb_state *mrb, mrb_value val, VARIANT *var);
+void ole_val2variant_result(mrb_state *mrb, mrb_value val, VARIANT *var);
 void ole_val2variant2(mrb_state *mrb, mrb_value val, VARIANT *var);
 void ole_val2variant_ex(mrb_state *mrb, mrb_value val, VARIANT *var, VARTYPE vt);
 mrb_value ole_variant2val(mrb_state *mrb, VARIANT *pvar);
-void ole_protect_variant_result_owner(mrb_state *mrb, mrb_value val, VARIANT *pvar);
 HRESULT ole_val_ary2variant_ary(mrb_state *mrb, mrb_value val, VARIANT *var, VARTYPE vt);
 VOID *val2variant_ptr(mrb_state *mrb, mrb_value val, VARIANT *var, VARTYPE vt);
 HRESULT typelib_from_val(mrb_state *mrb, mrb_value obj, ITypeLib **pTypeLib);

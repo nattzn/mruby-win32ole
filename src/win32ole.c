@@ -473,7 +473,7 @@ invoke_body(mrb_state *mrb, void *userdata)
     }
     v = mrb_funcall_argv(mrb, data->dispatch->obj, mid, args, data->parg);
     if (data->pVarResult) {
-        ole_val2variant(mrb, v, data->pVarResult);
+        ole_val2variant_result(mrb, v, data->pVarResult);
     }
     return v;
 }
@@ -494,7 +494,6 @@ static /* [local] */ HRESULT ( STDMETHODCALLTYPE Invoke )(
     int args;
     int ai;
     mrb_bool error;
-    mrb_value result;
     struct invoke_data data;
 
     if (!pDispParams) return E_INVALIDARG;
@@ -507,7 +506,7 @@ static /* [local] */ HRESULT ( STDMETHODCALLTYPE Invoke )(
     data.parg = ALLOCA_N(mrb_value, args);
     if (pVarResult) VariantInit(pVarResult);
     ai = mrb_gc_arena_save(mrb);
-    result = mrb_protect_error(mrb, invoke_body, &data, &error);
+    mrb_protect_error(mrb, invoke_body, &data, &error);
     if (error) {
         if (pVarResult) VariantClear(pVarResult);
         if (pExcepInfo) {
@@ -518,17 +517,109 @@ static /* [local] */ HRESULT ( STDMETHODCALLTYPE Invoke )(
         return DISP_E_EXCEPTION;
     }
     mrb_gc_arena_restore(mrb, ai);
-    ole_protect_variant_result_owner(mrb, result, pVarResult);
     return S_OK;
 }
 
-/* Keep Ruby owners alive for VARIANT results that borrow their storage.
-   Arrays stay protected because SAFEARRAY elements may borrow BYREF data. */
-void
-ole_protect_variant_result_owner(mrb_state *mrb, mrb_value val, VARIANT *pvar)
+static HRESULT
+ole_variant_result_normalize(mrb_state *mrb, VARIANT *var)
 {
-    if (pvar && (mrb_data_p(val) || mrb_array_p(val))) {
-        mrb_gc_protect(mrb, val);
+    HRESULT hr;
+
+    while (V_ISBYREF(var)) {
+        VARIANT owned;
+        VariantInit(&owned);
+        hr = VariantCopyInd(&owned, var);
+        if (FAILED(hr)) {
+            VariantClear(&owned);
+            return hr;
+        }
+        hr = VariantClear(var);
+        if (FAILED(hr)) {
+            VariantClear(&owned);
+            return hr;
+        }
+        *var = owned;
+    }
+
+    if (V_ISARRAY(var) && (V_VT(var) & VT_TYPEMASK) == VT_VARIANT) {
+        SAFEARRAY *psa = V_ARRAY(var);
+        VARIANT *elements = NULL;
+        ULONG element_count = 1;
+        UINT dim;
+        UINT i;
+        ULONG j;
+
+        if (psa == NULL) return S_OK;
+        dim = SafeArrayGetDim(psa);
+        if (dim == 0) return E_INVALIDARG;
+        for (i = 1; i <= dim; ++i) {
+            LONG lower, upper;
+            LONGLONG span;
+            hr = SafeArrayGetLBound(psa, i, &lower);
+            if (FAILED(hr)) return hr;
+            hr = SafeArrayGetUBound(psa, i, &upper);
+            if (FAILED(hr)) return hr;
+            span = (LONGLONG)upper - (LONGLONG)lower + 1;
+            if (span < 0 || (ULONGLONG)span > (ULONGLONG)(~(ULONG)0)) {
+                return DISP_E_OVERFLOW;
+            }
+            if (span == 0) {
+                element_count = 0;
+            }
+            else if (element_count != 0) {
+                if (element_count > (~(ULONG)0) / (ULONG)span) {
+                    return DISP_E_OVERFLOW;
+                }
+                element_count *= (ULONG)span;
+            }
+        }
+
+        hr = SafeArrayAccessData(psa, (void **)&elements);
+        if (FAILED(hr)) return hr;
+        for (j = 0; j < element_count; ++j) {
+            hr = ole_variant_result_normalize(mrb, &elements[j]);
+            if (FAILED(hr)) break;
+        }
+        {
+            HRESULT unlock_hr = SafeArrayUnaccessData(psa);
+            if (SUCCEEDED(hr)) hr = unlock_hr;
+        }
+        return hr;
+    }
+    return S_OK;
+}
+
+struct ole_val2variant_result_data {
+    mrb_value val;
+    VARIANT *var;
+};
+
+static mrb_value
+ole_val2variant_result_body(mrb_state *mrb, void *userdata)
+{
+    struct ole_val2variant_result_data *data = userdata;
+    HRESULT hr;
+
+    ole_val2variant(mrb, data->val, data->var);
+    hr = ole_variant_result_normalize(mrb, data->var);
+    if (FAILED(hr)) {
+        ole_raise(mrb, hr, E_WIN32OLE_RUNTIME_ERROR,
+                  "failed to normalize callback result");
+    }
+    return mrb_nil_value();
+}
+
+void
+ole_val2variant_result(mrb_state *mrb, mrb_value val, VARIANT *var)
+{
+    struct ole_val2variant_result_data data = { val, var };
+    mrb_bool error;
+    mrb_value error_value = mrb_protect_error(mrb, ole_val2variant_result_body,
+                                               &data, &error);
+
+    if (error) {
+        VariantClear(var);
+        mrb_exc_raise(mrb, error_value);
     }
 }
 
@@ -2807,9 +2898,7 @@ set_argv(mrb_state *mrb, VARIANTARG* realargs, unsigned int beg, unsigned int en
         int ai = mrb_gc_arena_save(mrb);
         mrb_ary_push(mrb, argv, ole_variant2val(mrb, &realargs[end]));
         mrb_gc_arena_restore(mrb, ai);
-        if (V_VT(&realargs[end]) != VT_RECORD) {
-            VariantClear(&realargs[end]);
-        }
+        VariantClear(&realargs[end]);
     }
     return argv;
 }
@@ -3007,9 +3096,7 @@ ole_invoke(mrb_state *mrb, mrb_int argc, mrb_value *argv, mrb_value self, USHORT
             }
             for(i = cNamedArgs; i < op.dp.cArgs; i++) {
                 n = op.dp.cArgs - i + cNamedArgs - 1;
-                if (V_VT(&op.dp.rgvarg[n]) != VT_RECORD) {
-                    VariantClear(&op.dp.rgvarg[n]);
-                }
+                VariantClear(&op.dp.rgvarg[n]);
             }
         }
 
@@ -3032,9 +3119,7 @@ ole_invoke(mrb_state *mrb, mrb_int argc, mrb_value *argv, mrb_value self, USHORT
                         &excepinfo, &argErr);
                 for(i = cNamedArgs; i < op.dp.cArgs; i++) {
                     n = op.dp.cArgs - i + cNamedArgs - 1;
-                    if (V_VT(&op.dp.rgvarg[n]) != VT_RECORD) {
-                        VariantClear(&op.dp.rgvarg[n]);
-                    }
+                    VariantClear(&op.dp.rgvarg[n]);
                 }
             }
         }
@@ -3221,9 +3306,7 @@ ole_invoke2(mrb_state *mrb, mrb_value self, mrb_value dispid, mrb_value args, mr
                     {
                         int k;
                         for (k = 0; k <= i; k++) {
-                            if (V_VT(&realargs[k]) != VT_RECORD) {
-                                VariantClear(&realargs[k]);
-                            }
+                            VariantClear(&realargs[k]);
                         }
                         mrb_raisef(mrb, E_TYPE_ERROR,
                                    "argument %S for dispatch ID %S cannot be converted from %S to VARIANT type %S",

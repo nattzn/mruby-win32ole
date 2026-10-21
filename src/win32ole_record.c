@@ -90,6 +90,7 @@ ole_rec2variant(mrb_state *mrb, mrb_value rec, VARIANT *var)
     struct olerecorddata *prec;
     ULONG size = 0;
     IRecordInfo *pri;
+    void *record_copy = NULL;
     HRESULT hr;
     mrb_value fields;
     mrb_value keys;
@@ -119,8 +120,16 @@ ole_rec2variant(mrb_state *mrb, mrb_value rec, VARIANT *var)
             mrb_value key = RARRAY_PTR(keys)[i];
             hash2olerec(mrb, key, mrb_hash_get(mrb, fields, key), rec); 
         }
+        hr = pri->lpVtbl->RecordCreateCopy(pri, prec->pdata, &record_copy);
+        if (FAILED(hr)) {
+            if (record_copy) {
+                pri->lpVtbl->RecordDestroy(pri, record_copy);
+            }
+            ole_raise(mrb, hr, E_WIN32OLE_RUNTIME_ERROR, "failed to copy VT_RECORD object");
+        }
+        OLE_ADDREF(pri);
         V_RECORDINFO(var) = pri;
-        V_RECORD(var) = prec->pdata;
+        V_RECORD(var) = record_copy;
         V_VT(var) = VT_RECORD;
     } else {
         mrb_raise(mrb, E_WIN32OLE_RUNTIME_ERROR, "failed to retrieve IRecordInfo interface");
