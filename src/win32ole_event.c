@@ -462,35 +462,71 @@ ole_val2ptr_variant(mrb_state *mrb, mrb_value val, VARIANT *var)
     }
 }
 
+struct hash2ptr_dispparams_data {
+    mrb_value hash;
+    BSTR *bstrs;
+    UINT len;
+    DISPPARAMS *pdispparams;
+};
+
+static mrb_value
+hash2ptr_dispparams_body(mrb_state *mrb, void *userdata)
+{
+    struct hash2ptr_dispparams_data *data = userdata;
+    UINT i;
+    VARIANT *pvar;
+    mrb_value val;
+    mrb_value key;
+
+    for (i = 0; i + 1 < data->len; i++) {
+        key = ole_wc2vstr(mrb, data->bstrs[i + 1], FALSE);
+        val = mrb_hash_get(mrb, data->hash, INT2FIX(i));
+        if (mrb_nil_p(val))
+            val = mrb_hash_get(mrb, data->hash, key);
+        if (mrb_nil_p(val))
+            val = mrb_hash_get(mrb, data->hash, mrb_str_intern(mrb, key));
+        pvar = &data->pdispparams->rgvarg[data->pdispparams->cArgs-i-1];
+        ole_val2ptr_variant(mrb, val, pvar);
+    }
+    return mrb_nil_value();
+}
+
 static void
 hash2ptr_dispparams(mrb_state *mrb, mrb_value hash, ITypeInfo *pTypeInfo, DISPID dispid, DISPPARAMS *pdispparams)
 {
     BSTR *bstrs;
     HRESULT hr;
-    UINT len, i;
-    VARIANT *pvar;
-    mrb_value val;
-    mrb_value key;
-    len = 0;
-    bstrs = ALLOCA_N(BSTR, pdispparams->cArgs + 1);
-    hr = pTypeInfo->lpVtbl->GetNames(pTypeInfo, dispid,
-                                     bstrs, pdispparams->cArgs + 1,
-                                     &len);
-    if (FAILED(hr))
-	return;
+    UINT len, i, capacity;
+    mrb_value error_value;
+    mrb_bool error;
+    struct hash2ptr_dispparams_data data;
 
-    for (i = 0; i < len - 1; i++) {
-	key = WC2VSTR(mrb, bstrs[i + 1]);
-        val = mrb_hash_get(mrb, hash, INT2FIX(i));
-	if (mrb_nil_p(val))
-	    val = mrb_hash_get(mrb, hash, key);
-	if (mrb_nil_p(val))
-	    val = mrb_hash_get(mrb, hash, mrb_str_intern(mrb, key));
-        pvar = &pdispparams->rgvarg[pdispparams->cArgs-i-1];
-        ole_val2ptr_variant(mrb, val, pvar);
+    capacity = pdispparams->cArgs + 1;
+    bstrs = ALLOCA_N(BSTR, capacity);
+    memset(bstrs, 0, sizeof(BSTR) * capacity);
+    len = 0;
+    hr = pTypeInfo->lpVtbl->GetNames(pTypeInfo, dispid,
+                                     bstrs, capacity,
+                                     &len);
+    if (FAILED(hr)) {
+        for (i = 0; i < capacity; i++) {
+            if (bstrs[i])
+                SysFreeString(bstrs[i]);
+        }
+        return;
     }
-    if (len > 0)
-        SysFreeString(bstrs[0]);
+
+    data.hash = hash;
+    data.bstrs = bstrs;
+    data.len = len < capacity ? len : capacity;
+    data.pdispparams = pdispparams;
+    error_value = mrb_protect_error(mrb, hash2ptr_dispparams_body, &data, &error);
+    for (i = 0; i < capacity; i++) {
+        if (bstrs[i])
+            SysFreeString(bstrs[i]);
+    }
+    if (error)
+        mrb_exc_raise(mrb, error_value);
 }
 
 static mrb_value
