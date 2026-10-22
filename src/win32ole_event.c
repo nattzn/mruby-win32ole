@@ -401,7 +401,7 @@ ole_val2ptr_variant(mrb_state *mrb, mrb_value val, VARIANT *var)
             *V_BSTRREF(var) = ole_vstr2wc(mrb, val);
         }
         break;
-    case MRB_TT_FIXNUM:
+    case MRB_TT_INTEGER:
         switch(V_VT(var)) {
         case (VT_UI1 | VT_BYREF) :
             *V_UI1REF(var) = NUM2CHR(val);
@@ -1178,7 +1178,7 @@ ev_on_event(mrb_state *mrb, mrb_int argc, mrb_value *argv, mrb_value self, mrb_v
             mrb_raise(mrb, E_TYPE_ERROR, "wrong argument type (expected String or Symbol)");
         }
         if (mrb_symbol_p(event)) {
-            event = mrb_sym2str(mrb, mrb_symbol(event));
+            event = mrb_sym_str(mrb, mrb_symbol(event));
         }
     }
     data = mrb_ary_new_capa(mrb, 4);
@@ -1281,7 +1281,7 @@ fev_off_event(mrb_state *mrb, mrb_value self)
             mrb_raise(mrb, E_TYPE_ERROR, "wrong argument type (expected String or Symbol)");
         }
         if (mrb_symbol_p(event)) {
-            event = mrb_sym2str(mrb, mrb_symbol(event));
+            event = mrb_sym_str(mrb, mrb_symbol(event));
         }
     }
     events = mrb_iv_get(mrb, self, id_events);

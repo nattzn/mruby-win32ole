@@ -21,12 +21,6 @@
 #define UINT2NUM(val) mrb_uint64_value(mrb, (uint64_t)(val))
 #define NUM2CHR(val) ((mrb_string_p(val) && (RSTRING_LEN(val)>=1)) ? RSTRING_PTR(val)[0] : (char)(NUM2INT(val) & 0xff))
 #define NUM2INT(val) mrb_as_int(mrb, (val))
-#define NUM2UINT(val) ole_num2uint(mrb, (val))
-#define NUM2LONG(val) (mrb_as_int(mrb, (val)))
-#define LL2NUM(val) INT2NUM((val))
-#define ULL2NUM(val) mrb_uint64_value(mrb, (uint64_t)(val))
-#define NUM2LL(val) ole_num2int64(mrb, (val))
-#define NUM2ULL(val) ole_num2uint64(mrb, (val))
 #define NUM2DBL(val) (mrb_as_float(mrb, (val)))
 #define ALLOC(type) ((type*)mrb_malloc(mrb, sizeof(type)))
 #define ALLOC_N(type, n) ((type *)mrb_malloc(mrb, sizeof(type) * (n)))
@@ -61,16 +55,6 @@ ole_num2uint64(mrb_state *mrb, mrb_value val)
     }
 #endif
     return mrb_as_uint64(mrb, val);
-}
-
-MRB_INLINE mrb_uint
-ole_num2uint(mrb_state *mrb, mrb_value val)
-{
-    uint64_t n = mrb_as_uint64(mrb, val);
-    if (n > (mrb_uint)-1) {
-        mrb_raise(mrb, E_RANGE_ERROR, "integer out of range");
-    }
-    return (mrb_uint)n;
 }
 
 #define GNUC_OLDER_3_4_4 \
@@ -164,11 +148,6 @@ ole_num2uint(mrb_state *mrb, mrb_value val)
 #ifndef V_RECORDINFO
 #define V_RECORDINFO(X) ((X)->pRecInfo)
 #endif
-
-#define I8_2_NUM LL2NUM
-#define UI8_2_NUM ULL2NUM
-#define NUM2I8  NUM2LL
-#define NUM2UI8 NUM2ULL
 
 #define OLE_ADDREF(X) (X) ? ((X)->lpVtbl->AddRef(X)) : 0
 #define OLE_RELEASE(X) (X) ? ((X)->lpVtbl->Release(X)) : 0

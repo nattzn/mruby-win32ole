@@ -1090,9 +1090,7 @@ ole_free(mrb_state *mrb, void *ptr)
 struct oledata *
 oledata_get_struct(mrb_state *mrb, mrb_value ole)
 {
-    struct oledata *pole;
-    pole = mrb_data_get_ptr(mrb, ole, &ole_datatype);
-    return pole;
+    return mrb_data_get_ptr(mrb, ole, &ole_datatype);
 }
 
 void *
@@ -1262,11 +1260,11 @@ ole_val2variant_ex(mrb_state *mrb, mrb_value val, VARIANT *var, VARTYPE vt)
     switch(vt & ~VT_BYREF) {
     case VT_I8:
         V_VT(var) = VT_I8;
-        V_I8(var) = NUM2I8 (val);
+        V_I8(var) = ole_num2int64(mrb, val);
         break;
     case VT_UI8:
         V_VT(var) = VT_UI8;
-        V_UI8(var) = NUM2UI8(val);
+        V_UI8(var) = ole_num2uint64(mrb, val);
         break;
     default:
         ole_val2variant2(mrb, val, var);
@@ -1921,27 +1919,19 @@ ole_variant2val(mrb_state *mrb, VARIANT *pvar)
 #if (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__CYGWIN__) || defined(__MINGW32__)
     case VT_I8:
         if(V_ISBYREF(pvar))
-#if (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__CYGWIN__) || defined(__MINGW32__)
 #ifdef V_I8REF
-            obj = I8_2_NUM(*V_I8REF(pvar));
-#endif
-#else
-            obj = mrb_nil_value();
+            obj = mrb_int64_value(mrb, *V_I8REF(pvar));
 #endif
         else
-            obj = I8_2_NUM(V_I8(pvar));
+            obj = mrb_int64_value(mrb, V_I8(pvar));
         break;
     case VT_UI8:
         if(V_ISBYREF(pvar))
-#if (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__CYGWIN__) || defined(__MINGW32__)
 #ifdef V_UI8REF
-            obj = UI8_2_NUM(*V_UI8REF(pvar));
-#endif
-#else
-            obj = mrb_nil_value();
+            obj = mrb_uint64_value(mrb, *V_UI8REF(pvar));
 #endif
         else
-            obj = UI8_2_NUM(V_UI8(pvar));
+            obj = mrb_uint64_value(mrb, V_UI8(pvar));
         break;
 #endif  /* (defined(_MSC_VER) && (_MSC_VER >= 1300)) || defined(__CYGWIN__) || defined(__MINGW32__) */
 
@@ -2951,7 +2941,7 @@ hash2named_arg(mrb_state *mrb, mrb_value key, mrb_value val, struct oleparam* pO
         mrb_raise(mrb, E_TYPE_ERROR, "wrong argument type (expected String or Symbol)");
     }
     if (mrb_symbol_p(key)) {
-	key = mrb_sym2str(mrb, mrb_symbol(key));
+	key = mrb_sym_str(mrb, mrb_symbol(key));
     }
 
     /* pNamedArgs[0] is <method name>, so "index + 1" */
@@ -3061,7 +3051,7 @@ ole_invoke_body(mrb_state *mrb, void *ptr)
 	mrb_raise(mrb, E_TYPE_ERROR, "method is wrong type (expected String or Symbol)");
     }
     if (mrb_symbol_p(cmd)) {
-	cmd = mrb_sym2str(mrb, mrb_symbol(cmd));
+	cmd = mrb_sym_str(mrb, mrb_symbol(cmd));
     }
     pole = oledata_get_struct(mrb, self);
     if(!pole || !pole->pDispatch) {
@@ -3947,7 +3937,7 @@ fole_missing(mrb_state *mrb, mrb_value self)
     if (argc < 1)
         mrb_raisef(mrb, E_ARGUMENT_ERROR, "wrong number of arguments (%S for 1..)", mrb_fixnum_value(argc));
     id = mrb_symbol_p(argv[0]) ? mrb_symbol(argv[0]) : mrb_intern_str(mrb, mrb_ensure_string_type(mrb, argv[0]));
-    mname = mrb_sym2name(mrb, id);
+    mname = mrb_sym_name(mrb, id);
     if(!mname) {
         mrb_raise(mrb, E_RUNTIME_ERROR, "fail: unknown method or property");
     }
@@ -4238,7 +4228,7 @@ fole_respond_to(mrb_state *mrb, mrb_value self)
         mrb_raise(mrb, E_TYPE_ERROR, "wrong argument type (expected String or Symbol)");
     }
     if (mrb_symbol_p(method)) {
-        method = mrb_sym2str(mrb, mrb_symbol(method));
+        method = mrb_sym_str(mrb, mrb_symbol(method));
     }
     pole = oledata_get_live_struct(mrb, self);
     wcmdname = ole_vstr2wc(mrb, method);

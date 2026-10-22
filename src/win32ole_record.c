@@ -306,7 +306,7 @@ folerecord_initialize(mrb_state *mrb, mrb_value self) {
         mrb_raise(mrb, E_ARGUMENT_ERROR, "1st argument should be String or Symbol");
     }
     if (mrb_symbol_p(typename)) {
-        typename = mrb_sym2str(mrb, mrb_symbol(typename));
+        typename = mrb_sym_str(mrb, mrb_symbol(typename));
     }
 
     hr = S_OK;
@@ -487,7 +487,7 @@ folerecord_method_missing(mrb_state *mrb, mrb_value self)
         mrb_raisef(mrb, E_ARGUMENT_ERROR, "wrong number of arguments (%S for 1..2)", mrb_fixnum_value(argc));
 
     id = mrb_symbol_p(argv[0]) ? mrb_symbol(argv[0]) : mrb_intern_str(mrb, mrb_ensure_string_type(mrb, argv[0]));
-    name = mrb_sym2str(mrb, id);
+    name = mrb_sym_str(mrb, id);
 
 #if SIZEOF_SIZE_T > SIZEOF_LONG
     {
@@ -545,7 +545,7 @@ folerecord_ole_instance_variable_get(mrb_state *mrb, mrb_value self)
     }
     sname = name;
     if (mrb_symbol_p(name)) {
-        sname = mrb_sym2str(mrb, mrb_symbol(name));
+        sname = mrb_sym_str(mrb, mrb_symbol(name));
     }
     return olerecord_ivar_get(mrb, self, sname);
 }
@@ -586,7 +586,7 @@ folerecord_ole_instance_variable_set(mrb_state *mrb, mrb_value self)
     }
     sname = name;
     if (mrb_symbol_p(name)) {
-        sname = mrb_sym2str(mrb, mrb_symbol(name));
+        sname = mrb_sym_str(mrb, mrb_symbol(name));
     }
     return olerecord_ivar_set(mrb, self, sname, val);
 }

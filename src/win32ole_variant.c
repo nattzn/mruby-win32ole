@@ -153,7 +153,7 @@ ole_val2variant_err(mrb_state *mrb, mrb_value val, VARIANT *var)
     }
     V_VT(var) = VT_ERROR;
     if (!mrb_nil_p(v)) {
-        V_ERROR(var) = mrb_fixnum_p(v) ? NUM2LONG(val) : (int)mrb_float(val);
+        V_ERROR(var) = mrb_fixnum_p(v) ? NUM2INT(val) : (int)mrb_float(val);
     } else {
         V_ERROR(var) = 0;
     }
@@ -349,7 +349,7 @@ check_type_val2variant(mrb_state *mrb, mrb_value val)
             }
             break;
         case MRB_TT_STRING:
-        case MRB_TT_FIXNUM:
+        case MRB_TT_INTEGER:
 #ifdef MRB_USE_BIGINT
         case MRB_TT_BIGINT:
 #endif
