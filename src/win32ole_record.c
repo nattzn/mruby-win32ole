@@ -486,7 +486,7 @@ folerecord_method_missing(mrb_state *mrb, mrb_value self)
     if (argc < 1 || argc > 2)
         mrb_raisef(mrb, E_ARGUMENT_ERROR, "wrong number of arguments (%S for 1..2)", mrb_fixnum_value(argc));
 
-    id = mrb_symbol_p(argv[0]) ? mrb_symbol(argv[0]) : mrb_intern_str(mrb, mrb_string_type(mrb, argv[0]));
+    id = mrb_symbol_p(argv[0]) ? mrb_symbol(argv[0]) : mrb_intern_str(mrb, mrb_ensure_string_type(mrb, argv[0]));
     name = mrb_sym2str(mrb, id);
 
 #if SIZEOF_SIZE_T > SIZEOF_LONG
@@ -632,7 +632,7 @@ void
 Init_win32ole_record(mrb_state *mrb)
 {
     struct RClass *cWIN32OLE_RECORD = mrb_define_class(mrb, "WIN32OLE_RECORD", mrb->object_class);
-    MRB_SET_INSTANCE_TT(cWIN32OLE_RECORD, MRB_TT_DATA);
+    MRB_SET_INSTANCE_TT(cWIN32OLE_RECORD, MRB_TT_CDATA);
     mrb_define_method(mrb, cWIN32OLE_RECORD, "initialize", folerecord_initialize, MRB_ARGS_REQ(2));
     mrb_define_method(mrb, cWIN32OLE_RECORD, "to_h", folerecord_to_h, MRB_ARGS_NONE());
     mrb_define_method(mrb, cWIN32OLE_RECORD, "typename", folerecord_typename, MRB_ARGS_NONE());

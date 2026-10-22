@@ -1417,7 +1417,7 @@ Init_win32ole_event(mrb_state *mrb)
     mrb_obj_iv_set(mrb, (struct RObject *)mrb->object_class, mrb_intern_lit(mrb, "_win32ole_ary_ole_event"), mrb_ary_new(mrb));
     cWIN32OLE_EVENT = mrb_define_class(mrb, "WIN32OLE_EVENT", mrb->object_class);
     mrb_define_class_method(mrb, cWIN32OLE_EVENT, "message_loop", fev_s_msg_loop, MRB_ARGS_NONE());
-    MRB_SET_INSTANCE_TT(cWIN32OLE_EVENT, MRB_TT_DATA);
+    MRB_SET_INSTANCE_TT(cWIN32OLE_EVENT, MRB_TT_CDATA);
     mrb_define_method(mrb, cWIN32OLE_EVENT, "initialize", fev_initialize, MRB_ARGS_ANY());
     mrb_define_method(mrb, cWIN32OLE_EVENT, "on_event", fev_on_event, MRB_ARGS_ANY());
     mrb_define_method(mrb, cWIN32OLE_EVENT, "on_event_with_outargs", fev_on_event_with_outargs, MRB_ARGS_ANY());

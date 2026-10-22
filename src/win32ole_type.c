@@ -930,7 +930,7 @@ void Init_win32ole_type(mrb_state *mrb)
     mrb_define_class_method(mrb, cWIN32OLE_TYPE, "ole_classes", foletype_s_ole_classes, MRB_ARGS_REQ(1));
     mrb_define_class_method(mrb, cWIN32OLE_TYPE, "typelibs", foletype_s_typelibs, MRB_ARGS_NONE());
     mrb_define_class_method(mrb, cWIN32OLE_TYPE, "progids", foletype_s_progids, MRB_ARGS_NONE());
-    MRB_SET_INSTANCE_TT(cWIN32OLE_TYPE, MRB_TT_DATA);
+    MRB_SET_INSTANCE_TT(cWIN32OLE_TYPE, MRB_TT_CDATA);
     mrb_define_method(mrb, cWIN32OLE_TYPE, "initialize", foletype_initialize, MRB_ARGS_REQ(2));
     mrb_define_method(mrb, cWIN32OLE_TYPE, "name", foletype_name, MRB_ARGS_NONE());
     mrb_define_method(mrb, cWIN32OLE_TYPE, "ole_type", foletype_ole_type, MRB_ARGS_NONE());

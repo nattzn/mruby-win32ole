@@ -632,7 +632,7 @@ ole_initialized(void)
 const char *
 ole_obj_to_cstr(mrb_state *mrb, mrb_value obj)
 {
-	mrb_value str = mrb_str_to_str(mrb, obj);
+	mrb_value str = mrb_obj_as_string(mrb, obj);
 	const char *p = RSTRING_PTR(str);
 	if (p[RSTRING_LEN(str)] == '\0')
 		return p;
@@ -1091,7 +1091,7 @@ struct oledata *
 oledata_get_struct(mrb_state *mrb, mrb_value ole)
 {
     struct oledata *pole;
-    Data_Get_Struct(mrb, ole, &ole_datatype, pole);
+    pole = mrb_data_get_ptr(mrb, ole, &ole_datatype);
     return pole;
 }
 
@@ -3946,7 +3946,7 @@ fole_missing(mrb_state *mrb, mrb_value self)
     mrb_get_args(mrb, "*", &argv, &argc);
     if (argc < 1)
         mrb_raisef(mrb, E_ARGUMENT_ERROR, "wrong number of arguments (%S for 1..)", mrb_fixnum_value(argc));
-    id = mrb_symbol_p(argv[0]) ? mrb_symbol(argv[0]) : mrb_intern_str(mrb, mrb_string_type(mrb, argv[0]));
+    id = mrb_symbol_p(argv[0]) ? mrb_symbol(argv[0]) : mrb_intern_str(mrb, mrb_ensure_string_type(mrb, argv[0]));
     mname = mrb_sym2name(mrb, id);
     if(!mname) {
         mrb_raise(mrb, E_RUNTIME_ERROR, "fail: unknown method or property");
@@ -4419,7 +4419,7 @@ ole_typedesc2val(mrb_state *mrb, ITypeInfo *pTypeInfo, TYPEDESC *pTypeDesc, mrb_
         break;
     default:
         typestr = mrb_str_new_lit(mrb, "Unknown Type ");
-        mrb_str_concat(mrb, typestr, mrb_fixnum_to_str(mrb, INT2FIX(pTypeDesc->vt), 10));
+        mrb_str_concat(mrb, typestr, mrb_integer_to_str(mrb, INT2FIX(pTypeDesc->vt), 10));
         break;
     }
     if (!mrb_nil_p(typedetails))
@@ -4566,7 +4566,7 @@ mrb_mruby_win32ole_gem_init(mrb_state* mrb)
 
     cWIN32OLE = mrb_define_class(mrb, "WIN32OLE", mrb->object_class);
 
-    MRB_SET_INSTANCE_TT(cWIN32OLE, MRB_TT_DATA);
+    MRB_SET_INSTANCE_TT(cWIN32OLE, MRB_TT_CDATA);
 
     mrb_define_method(mrb, cWIN32OLE, "initialize", fole_initialize, MRB_ARGS_ANY());
 

@@ -384,7 +384,7 @@ folevariable_inspect(mrb_state *mrb, mrb_value self)
 void Init_win32ole_variable(mrb_state *mrb)
 {
     struct RClass *cWIN32OLE_VARIABLE = mrb_define_class(mrb, "WIN32OLE_VARIABLE", mrb->object_class);
-    MRB_SET_INSTANCE_TT(cWIN32OLE_VARIABLE, MRB_TT_DATA);
+    MRB_SET_INSTANCE_TT(cWIN32OLE_VARIABLE, MRB_TT_CDATA);
     mrb_define_method(mrb, cWIN32OLE_VARIABLE, "name", folevariable_name, MRB_ARGS_NONE());
     mrb_define_method(mrb, cWIN32OLE_VARIABLE, "ole_type", folevariable_ole_type, MRB_ARGS_NONE());
     mrb_define_method(mrb, cWIN32OLE_VARIABLE, "ole_type_detail", folevariable_ole_type_detail, MRB_ARGS_NONE());

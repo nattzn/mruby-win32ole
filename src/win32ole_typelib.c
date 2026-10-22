@@ -532,9 +532,9 @@ make_version_str(mrb_state *mrb, mrb_value major, mrb_value minor)
     if (mrb_nil_p(major)) {
         return mrb_nil_value();
     }
-    version_str = mrb_str_to_str(mrb, major);
+    version_str = mrb_obj_as_string(mrb, major);
     if (!mrb_nil_p(minor)) {
-        minor_str = mrb_str_to_str(mrb, minor);
+        minor_str = mrb_obj_as_string(mrb, minor);
         mrb_str_cat_lit(mrb, version_str, ".");
         mrb_str_append(mrb, version_str, minor_str);
     }
@@ -879,7 +879,7 @@ Init_win32ole_typelib(mrb_state *mrb)
 {
     struct RClass *cWIN32OLE_TYPELIB = mrb_define_class(mrb, "WIN32OLE_TYPELIB", mrb->object_class);
     mrb_define_class_method(mrb, cWIN32OLE_TYPELIB, "typelibs", foletypelib_s_typelibs, MRB_ARGS_NONE());
-    MRB_SET_INSTANCE_TT(cWIN32OLE_TYPELIB, MRB_TT_DATA);
+    MRB_SET_INSTANCE_TT(cWIN32OLE_TYPELIB, MRB_TT_CDATA);
     mrb_define_method(mrb, cWIN32OLE_TYPELIB, "initialize", foletypelib_initialize, MRB_ARGS_ANY());
     mrb_define_method(mrb, cWIN32OLE_TYPELIB, "guid", foletypelib_guid, MRB_ARGS_NONE());
     mrb_define_method(mrb, cWIN32OLE_TYPELIB, "name", foletypelib_name, MRB_ARGS_NONE());

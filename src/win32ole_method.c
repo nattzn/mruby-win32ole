@@ -949,7 +949,7 @@ folemethod_inspect(mrb_state *mrb, mrb_value self)
 void Init_win32ole_method(mrb_state *mrb)
 {
     struct RClass *cWIN32OLE_METHOD = mrb_define_class(mrb, "WIN32OLE_METHOD", mrb->object_class);
-    MRB_SET_INSTANCE_TT(cWIN32OLE_METHOD, MRB_TT_DATA);
+    MRB_SET_INSTANCE_TT(cWIN32OLE_METHOD, MRB_TT_CDATA);
     mrb_define_method(mrb, cWIN32OLE_METHOD, "initialize", folemethod_initialize, MRB_ARGS_REQ(2));
     mrb_define_method(mrb, cWIN32OLE_METHOD, "name", folemethod_name, MRB_ARGS_NONE());
     mrb_define_method(mrb, cWIN32OLE_METHOD, "return_type", folemethod_return_type, MRB_ARGS_NONE());

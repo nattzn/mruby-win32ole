@@ -22,7 +22,7 @@
 #define NUM2CHR(val) ((mrb_string_p(val) && (RSTRING_LEN(val)>=1)) ? RSTRING_PTR(val)[0] : (char)(NUM2INT(val) & 0xff))
 #define NUM2INT(val) mrb_as_int(mrb, (val))
 #define NUM2UINT(val) ole_num2uint(mrb, (val))
-#define NUM2LONG(val) (mrb_int(mrb, (val)))
+#define NUM2LONG(val) (mrb_as_int(mrb, (val)))
 #define LL2NUM(val) INT2NUM((val))
 #define ULL2NUM(val) mrb_uint64_value(mrb, (uint64_t)(val))
 #define NUM2LL(val) ole_num2int64(mrb, (val))

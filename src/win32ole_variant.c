@@ -767,7 +767,7 @@ void
 Init_win32ole_variant(mrb_state *mrb)
 {
     struct RClass *cWIN32OLE_VARIANT = mrb_define_class(mrb, "WIN32OLE_VARIANT", mrb->object_class);
-    MRB_SET_INSTANCE_TT(cWIN32OLE_VARIANT, MRB_TT_DATA);
+    MRB_SET_INSTANCE_TT(cWIN32OLE_VARIANT, MRB_TT_CDATA);
 
     mrb_define_class_method(mrb, cWIN32OLE_VARIANT, "array", folevariant_s_array, MRB_ARGS_REQ(2));
     mrb_define_method(mrb, cWIN32OLE_VARIANT, "initialize", folevariant_initialize, MRB_ARGS_ANY());
