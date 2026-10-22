@@ -1,44 +1,33 @@
-mruby-win32ole
-==============
+# mruby-win32ole
 
-A port of CRuby's WIN32OLE to mruby.
+CRuby の WIN32OLE を mruby に移植した mrbgem です。
 
-## Installation
+## インストール
 
-In the mruby `build_config.rb` file add:
+mruby の `build_config.rb` に以下を追加してください:
 
 ```ruby
-conf.gem :git => 'git://github.com/sdottaka/mruby-win32ole.git'
+conf.gem :github => 'nattzn/mruby-win32ole'
 ```
 
-## Examples
+## 使用例
 
-See `mruby-win32ole/example` directory.
+`mruby-win32ole/example` ディレクトリを参照してください。
 
-## Object lifetime
+## オブジェクトの生存期間
 
-After `WIN32OLE#ole_free`, methods that require a live COM interface raise
-`RuntimeError`. `inspect` and repeated calls to `ole_free` remain safe, including
-when failed reinitialization has left the object without native data.
+`WIN32OLE#ole_free` の呼び出し後、有効な COM インターフェースを必要とするメソッドは `RuntimeError` を発生させます。`inspect` や `ole_free` の複数回呼び出しは安全に実行できます（再初期化の失敗によってオブジェクトが内部のネイティブデータを失っている場合も含みます）。
 
-Methods on type information, parameter, method, record, and variant wrappers that
-require native data also raise `RuntimeError` if that data is missing after failed
-reinitialization. Initializers may release previous native data before validating
-new arguments; a failed reinitialization is not guaranteed to preserve previous
-object state.
+型情報、パラメータ、メソッド、レコード、および VARIANT のラッパーオブジェクトにおいて、ネイティブデータを必要とするメソッドも、再初期化の失敗によりデータが失われている場合は `RuntimeError` を発生させます。イニシャライザは新しい引数を検証する前に既存のネイティブデータを解放することがあるため、再初期化に失敗した場合に以前のオブジェクト状態が維持される保証はありません。
 
-## Callback return values
+## コールバックの戻り値
 
-COM callback return values own their data independently of Ruby objects. BYREF
-values are returned by value, including VARIANT elements inside SAFEARRAYs. For
-example, a `VT_BSTR | VT_BYREF` result is returned as `VT_BSTR`.
+COM コールバックの戻り値は、Ruby オブジェクトから独立した独自のデータとして保持されます。SAFEARRAY 内の VARIANT 要素を含め、BYREF 値は値渡し（実体化された値）として返されます。例えば、`VT_BSTR | VT_BYREF` の戻り値は `VT_BSTR` として返されます。
 
-Records are returned as independent copies with their own `IRecordInfo` reference.
-The COM caller can release the result with `VariantClear`; keeping the original
-Ruby object alive is unnecessary. BYREF argument passing is unchanged.
+レコード（VT_RECORD）は独自の `IRecordInfo` 参照を持つ独立した複製として返されます。COM 呼び出し元は `VariantClear` で戻り値を安全に解放でき、元の Ruby オブジェクトを生存させておく必要はありません。なお、引数としての BYREF 渡しについては変更ありません。
 
-## License
+## ライセンス
 
-GNU General Public License or Artistic License
+GNU General Public License または Artistic License
 
-See `mruby-win32ole/src/win32ole.c`
+詳細は `mruby-win32ole/src/win32ole.c` を参照してください。
