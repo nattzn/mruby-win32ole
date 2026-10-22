@@ -17,22 +17,61 @@
 #endif
 #define FIX2INT(val) mrb_fixnum((val))
 #define INT2FIX(val) mrb_fixnum_value((val))
-#define INT2NUM(val) (FIXABLE((val)) ? mrb_fixnum_value((mrb_int)(val)) : mrb_float_value(mrb, (mrb_float)(val)))
-#define UINT2NUM(val) INT2NUM((unsigned mrb_int)(val))
+#define INT2NUM(val) mrb_int64_value(mrb, (int64_t)(val))
+#define UINT2NUM(val) mrb_uint64_value(mrb, (uint64_t)(val))
 #define NUM2CHR(val) ((mrb_string_p(val) && (RSTRING_LEN(val)>=1)) ? RSTRING_PTR(val)[0] : (char)(NUM2INT(val) & 0xff))
-#define TO_PDT(val) ((mrb_type((val)) == MRB_TT_FLOAT) ? mrb_float((val)) : mrb_int(mrb, (val)))
-#define NUM2INT(val) ((mrb_int)TO_PDT((val)))
-#define NUM2UINT(val) ((unsigned mrb_int)TO_PDT((val)))
+#define NUM2INT(val) mrb_as_int(mrb, (val))
+#define NUM2UINT(val) ole_num2uint(mrb, (val))
 #define NUM2LONG(val) (mrb_int(mrb, (val)))
 #define LL2NUM(val) INT2NUM((val))
-#define ULL2NUM(val) INT2NUM((unsigned __int64)(val))
-#define NUM2LL(val) ((__int64)(TO_PDT((val))))
-#define NUM2ULL(val) ((unsigned __int64)(TO_PDT((val))))
+#define ULL2NUM(val) mrb_uint64_value(mrb, (uint64_t)(val))
+#define NUM2LL(val) ole_num2int64(mrb, (val))
+#define NUM2ULL(val) ole_num2uint64(mrb, (val))
 #define NUM2DBL(val) (mrb_as_float(mrb, (val)))
 #define ALLOC(type) ((type*)mrb_malloc(mrb, sizeof(type)))
 #define ALLOC_N(type, n) ((type *)mrb_malloc(mrb, sizeof(type) * (n)))
 #define ALLOCA_N(type, n) ((type *)alloca(sizeof(type) * (n)))
 #define MEMCMP(p1,p2,type,n) memcmp((p1), (p2), sizeof(type)*(n))
+
+MRB_INLINE int64_t
+ole_num2int64(mrb_state *mrb, mrb_value val)
+{
+#ifndef MRB_NO_FLOAT
+    if (mrb_float_p(val)) {
+        mrb_float n = mrb_float(val);
+        if (!(n >= -9223372036854775808.0 && n < 9223372036854775808.0)) {
+            mrb_raise(mrb, E_RANGE_ERROR, "integer out of range");
+        }
+        return (int64_t)n;
+    }
+#endif
+    return mrb_as_int64(mrb, val);
+}
+
+MRB_INLINE uint64_t
+ole_num2uint64(mrb_state *mrb, mrb_value val)
+{
+#ifndef MRB_NO_FLOAT
+    if (mrb_float_p(val)) {
+        mrb_float n = mrb_float(val);
+        if (!(n > -1.0 && n < 18446744073709551616.0)) {
+            mrb_raise(mrb, E_RANGE_ERROR, "integer out of range");
+        }
+        return (uint64_t)n;
+    }
+#endif
+    return mrb_as_uint64(mrb, val);
+}
+
+MRB_INLINE mrb_uint
+ole_num2uint(mrb_state *mrb, mrb_value val)
+{
+    uint64_t n = mrb_as_uint64(mrb, val);
+    if (n > (mrb_uint)-1) {
+        mrb_raise(mrb, E_RANGE_ERROR, "integer out of range");
+    }
+    return (mrb_uint)n;
+}
 
 #define GNUC_OLDER_3_4_4 \
     ((__GNUC__ < 3) || \
@@ -126,17 +165,10 @@
 #define V_RECORDINFO(X) ((X)->pRecInfo)
 #endif
 
-#if defined(HAVE_LONG_LONG) || defined(__int64) || defined(_MSC_VER)
 #define I8_2_NUM LL2NUM
 #define UI8_2_NUM ULL2NUM
 #define NUM2I8  NUM2LL
 #define NUM2UI8 NUM2ULL
-#else
-#define I8_2_NUM INT2NUM
-#define UI8_2_NUM UINT2NUM
-#define NUM2I8  NUM2INT
-#define NUM2UI8 NUM2UINT
-#endif
 
 #define OLE_ADDREF(X) (X) ? ((X)->lpVtbl->AddRef(X)) : 0
 #define OLE_RELEASE(X) (X) ? ((X)->lpVtbl->Release(X)) : 0

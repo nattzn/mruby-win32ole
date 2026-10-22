@@ -350,7 +350,9 @@ check_type_val2variant(mrb_state *mrb, mrb_value val)
             break;
         case MRB_TT_STRING:
         case MRB_TT_FIXNUM:
-        /* FIXME: case MRB_TT_BIGNUM: */
+#ifdef MRB_USE_BIGINT
+        case MRB_TT_BIGINT:
+#endif
         case MRB_TT_FLOAT:
         case MRB_TT_TRUE:
         case MRB_TT_FALSE:

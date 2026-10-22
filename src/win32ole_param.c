@@ -388,26 +388,44 @@ foleparam_retval(mrb_state *mrb, mrb_value self)
                                pparam->index, PARAMFLAG_FRETVAL);
 }
 
+struct ole_param_default_data {
+    FUNCDESC *pFuncDesc;
+    UINT index;
+};
+
+static mrb_value
+ole_param_default_body(mrb_state *mrb, void *userdata)
+{
+    struct ole_param_default_data *data = userdata;
+    ELEMDESC *pElemDesc = &data->pFuncDesc->lprgelemdescParam[data->index];
+    USHORT mask = PARAMFLAG_FOPT|PARAMFLAG_FHASDEFAULT;
+    USHORT wParamFlags = V_UNION1(pElemDesc, paramdesc).wParamFlags;
+
+    if ((wParamFlags & mask) == mask) {
+        PARAMDESCEX *pParamDescEx = V_UNION1(pElemDesc, paramdesc).pparamdescex;
+        return ole_variant2val(mrb, &pParamDescEx->varDefaultValue);
+    }
+    return mrb_nil_value();
+}
+
 static mrb_value
 ole_param_default(mrb_state *mrb, ITypeInfo *pTypeInfo, UINT method_index, UINT index)
 {
     FUNCDESC *pFuncDesc;
-    ELEMDESC *pElemDesc;
-    PARAMDESCEX * pParamDescEx;
     HRESULT hr;
-    USHORT wParamFlags;
-    USHORT mask = PARAMFLAG_FOPT|PARAMFLAG_FHASDEFAULT;
-    mrb_value defval = mrb_nil_value();
+    struct ole_param_default_data data;
+    mrb_value defval;
+    mrb_bool error;
     hr = pTypeInfo->lpVtbl->GetFuncDesc(pTypeInfo, method_index, &pFuncDesc);
     if (FAILED(hr))
-        return defval;
-    pElemDesc = &pFuncDesc->lprgelemdescParam[index];
-    wParamFlags = V_UNION1(pElemDesc, paramdesc).wParamFlags;
-    if ((wParamFlags & mask) == mask) {
-         pParamDescEx = V_UNION1(pElemDesc, paramdesc).pparamdescex;
-         defval = ole_variant2val(mrb, &pParamDescEx->varDefaultValue);
-    }
+        return mrb_nil_value();
+    data.pFuncDesc = pFuncDesc;
+    data.index = index;
+    defval = mrb_protect_error(mrb, ole_param_default_body, &data, &error);
     pTypeInfo->lpVtbl->ReleaseFuncDesc(pTypeInfo, pFuncDesc);
+    if (error) {
+        mrb_exc_raise(mrb, defval);
+    }
     return defval;
 }
 

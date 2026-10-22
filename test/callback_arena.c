@@ -7,6 +7,8 @@ void mrb_mruby_win32ole_early_invoke_test(mrb_state *mrb);
 void mrb_mruby_win32ole_bstr_cleanup_test(mrb_state *mrb);
 void mrb_mruby_win32ole_object_state_test(mrb_state *mrb);
 void mrb_mruby_win32ole_record_result_test(mrb_state *mrb);
+void mrb_mruby_win32ole_integer_conversion_test(mrb_state *mrb);
+void mrb_mruby_win32ole_integer_invoke_cleanup_test(mrb_state *mrb);
 
 static const WCHAR result_text[] = L"callback result";
 
@@ -314,4 +316,6 @@ mrb_mruby_win32ole_gem_test(mrb_state *mrb)
     mrb_mruby_win32ole_bstr_cleanup_test(mrb);
     mrb_mruby_win32ole_object_state_test(mrb);
     mrb_mruby_win32ole_record_result_test(mrb);
+    mrb_mruby_win32ole_integer_conversion_test(mrb);
+    mrb_mruby_win32ole_integer_invoke_cleanup_test(mrb);
 }

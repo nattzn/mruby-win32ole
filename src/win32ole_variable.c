@@ -160,18 +160,37 @@ folevariable_ole_type_detail(mrb_state *mrb, mrb_value self)
     return ole_variable_ole_type_detail(mrb, pvar->pTypeInfo, pvar->index);
 }
 
+struct ole_variable_value_data {
+    VARDESC *pVarDesc;
+};
+
+static mrb_value
+ole_variable_value_body(mrb_state *mrb, void *userdata)
+{
+    struct ole_variable_value_data *data = userdata;
+    if (data->pVarDesc->varkind == VAR_CONST) {
+        return ole_variant2val(mrb, V_UNION1(data->pVarDesc, lpvarValue));
+    }
+    return mrb_nil_value();
+}
+
 static mrb_value
 ole_variable_value(mrb_state *mrb, ITypeInfo *pTypeInfo, UINT var_index)
 {
     VARDESC *pVarDesc;
     HRESULT hr;
-    mrb_value val = mrb_nil_value();
+    struct ole_variable_value_data data;
+    mrb_value val;
+    mrb_bool error;
     hr = pTypeInfo->lpVtbl->GetVarDesc(pTypeInfo, var_index, &pVarDesc);
     if (FAILED(hr))
         return mrb_nil_value();
-    if(pVarDesc->varkind == VAR_CONST)
-        val = ole_variant2val(mrb, V_UNION1(pVarDesc, lpvarValue));
+    data.pVarDesc = pVarDesc;
+    val = mrb_protect_error(mrb, ole_variable_value_body, &data, &error);
     pTypeInfo->lpVtbl->ReleaseVarDesc(pTypeInfo, pVarDesc);
+    if (error) {
+        mrb_exc_raise(mrb, val);
+    }
     return val;
 }
 
